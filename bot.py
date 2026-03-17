@@ -3,7 +3,6 @@ import asyncio
 import datetime
 import sqlite3
 import os
-from equipment import EQUIPMENT
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, CallbackQuery
 from aiogram.fsm.storage.memory import MemoryStorage

@@ -270,7 +270,6 @@ if message.text.split(" (")[0] in equipment[category]:
     else:
         await message.answer(f"{item_name} больше нет в наличии")
         return
-            else:
             await message.answer(f"{item_name} больше нет в наличии")
             return
     elif message.text == "Готово":

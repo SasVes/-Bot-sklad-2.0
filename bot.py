@@ -268,7 +268,7 @@ if message.text.split(" (")[0] in equipment[category]:
         await message.answer("Выберите оборудование:", reply_markup=keyboard)
         return
         await message.answer(f"{item_name} больше нет в наличии")
-            return
+        return
     else:
     elif message.text == "Готово":
         if not items:

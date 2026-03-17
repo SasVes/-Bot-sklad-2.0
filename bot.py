@@ -232,41 +232,44 @@ async def choose_items(message: Message, state: FSMContext):
     items = data.get("items", {})
     equipment = load_equipment()
     # Убираем " (X шт.)" для проверки
-    if message.text.split(" (")[0] in equipment[category]:
-        item_name = message.text.split(" (")[0]  # Получаем название оборудования без количества
-        date = data["date"]
-# Получаем уже забронированное количество
-        cursor.execute("SELECT equipment FROM bookings WHERE date = ?", (date,))
-        booked_equipment = cursor.fetchall()
-        booked_items = {}
-        for booking in booked_equipment:
-            for item_line in booking[0].split("\n"):
-                if " x" in item_line:
-                    name, quantity = item_line.split(" x")
-                    booked_items[name] = booked_items.get(name, 0) + int(quantity)
-        # Сколько уже выбрал пользователь
-        current_selected = items.get(item_name, 0)
-        # Всего доступно
-        total_available = equipment[category][item_name][0]
-        already_booked = booked_items.get(item_name, 0)
-        # Проверяем лимит
+if message.text.split(" (")[0] in equipment[category]:
+    item_name = message.text.split(" (")[0]
+    date = data["date"]
+    # Получаем уже забронированное количество
+    cursor.execute("SELECT equipment FROM bookings WHERE date = ?", (date,))
+    booked_equipment = cursor.fetchall()
+    booked_items = {}
+    for booking in booked_equipment:
+        for item_line in booking[0].split("\n"):
+            if " x" in item_line:
+                name, quantity = item_line.split(" x")
+                booked_items[name] = booked_items.get(name, 0) + int(quantity)
+    # Сколько уже выбрал пользователь
+    current_selected = items.get(item_name, 0)
+    # Всего доступно
+    total_available = equipment[category][item_name][0]
+    already_booked = booked_items.get(item_name, 0)
+    # ✅ ВОТ ЭТОТ if ДОЛЖЕН БЫТЬ ВНУТРИ
     if current_selected + already_booked < total_available:
-            items[item_name] = current_selected + 1
-            await state.update_data(items=items)
-            keyboard_buttons = []
-            for item, details in equipment[category].items():
-                total_available = details[0]
-                booked = booked_items.get(item, 0)
-                selected = items.get(item, 0)
-                available = total_available - booked - selected
-                keyboard_buttons.append([
-                    KeyboardButton(text=f"{item} ({max(0, available)} шт.)")
-                ])
-            keyboard_buttons.append([KeyboardButton(text="Назад"), KeyboardButton(text="Готово")])
-            keyboard_buttons.append([KeyboardButton(text="Изменить дату")])
-            keyboard = ReplyKeyboardMarkup(keyboard=keyboard_buttons, resize_keyboard=True)
-            await message.answer("Выберите оборудование:", reply_markup=keyboard)
-            return
+        items[item_name] = current_selected + 1
+        await state.update_data(items=items)
+        keyboard_buttons = []
+        for item, details in equipment[category].items():
+            total_available = details[0]
+            booked = booked_items.get(item, 0)
+            selected = items.get(item, 0)
+            available = total_available - booked - selected
+            keyboard_buttons.append([
+                KeyboardButton(text=f"{item} ({max(0, available)} шт.)")
+            ])
+        keyboard_buttons.append([KeyboardButton(text="Назад"), KeyboardButton(text="Готово")])
+        keyboard_buttons.append([KeyboardButton(text="Изменить дату")])
+        keyboard = ReplyKeyboardMarkup(keyboard=keyboard_buttons, resize_keyboard=True)
+        await message.answer("Выберите оборудование:", reply_markup=keyboard)
+        return
+    else:
+        await message.answer(f"{item_name} больше нет в наличии")
+        return
         else:
             await message.answer(f"{item_name} больше нет в наличии")
             return

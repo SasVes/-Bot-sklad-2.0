@@ -191,26 +191,20 @@ async def choose_category(message: Message, state: FSMContext):
         await show_confirmation(message, state)
     else:
         await message.answer("Выберите категорию из списка.")
-
 # Функция для показа подтверждения бронирования
 async def show_confirmation(message: Message, state: FSMContext):
     data = await state.get_data()
     items = data.get("items", {})
-
-total_price = 0
-user_friendly_details = []
-for item, quantity in items.items():
-    item_data = get_item_data(item)
-    if item_data:
-        price_per_unit = item_data[1]
-        total_item_price = price_per_unit * quantity
-        total_price += total_item_price
-        user_friendly_details.append(f"{item} x{quantity} ({total_item_price} руб.)")
-    
-    # Формируем сообщение с выбранным оборудованием и общей стоимостью
+    total_price = 0
+    user_friendly_details = []
+    for item, quantity in items.items():
+        item_data = get_item_data(item)
+        if item_data:
+            price_per_unit = item_data[1]
+            total_item_price = price_per_unit * quantity
+            total_price += total_item_price
+            user_friendly_details.append(f"{item} x{quantity} ({total_item_price} руб.)")
     selected_items = "\n".join(user_friendly_details)
-    
-    # Создаем клавиатуру для выбора действия
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="Подтвердить бронь")],
@@ -220,17 +214,15 @@ for item, quantity in items.items():
         ],
         resize_keyboard=True
     )
-    
-if items:
-    await message.answer(
+    if items:
+        await message.answer(
             f"Текущий заказ:\n{selected_items}\n\n*Итого: {total_price} руб.*\n\nВыберите действие:",
             reply_markup=keyboard,
             parse_mode="Markdown"
         )
-else:
-    await message.answer("Вы не выбрали ни одного оборудования.", reply_markup=keyboard)
-    
-await state.set_state(BookingState.confirmation)
+    else:
+        await message.answer("Вы не выбрали ни одного оборудования.", reply_markup=keyboard)
+    await state.set_state(BookingState.confirmation)
 
 # Обработка выбора оборудования
 @dp.message(BookingState.choosing_items)

@@ -266,6 +266,7 @@ async def choose_items(message: Message, state: FSMContext):
             keyboard_buttons.append([KeyboardButton(text="Изменить дату")])
             keyboard = ReplyKeyboardMarkup(keyboard=keyboard_buttons, resize_keyboard=True)
             await message.answer("Выберите оборудование:", reply_markup=keyboard)
+            return
         else:
             await message.answer(f"{item_name} больше нет в наличии")
             return
@@ -274,7 +275,7 @@ async def choose_items(message: Message, state: FSMContext):
             await message.answer("Вы не выбрали ни одного оборудования.")
         else:
             await show_confirmation(message, state)
-    elif message.text == "Назад":
+        elif message.text == "Назад":
         equipment = load_equipment()
         await state.set_state(BookingState.choosing_category)
         keyboard = ReplyKeyboardMarkup(

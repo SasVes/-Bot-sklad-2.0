@@ -154,7 +154,7 @@ async def process_simple_calendar(callback_query: CallbackQuery, callback_data: 
 @dp.message(BookingState.choosing_category)
 async def choose_category(message: Message, state: FSMContext):
    equipment = load_equipment()
-    if message.text in equipment:
+   if message.text in equipment:
         await state.update_data(category=message.text)
         # Получаем выбранную дату
         data = await state.get_data()

@@ -287,34 +287,6 @@ async def choose_items(message: Message, state: FSMContext):
         if current_selected >= available:
             await message.answer("Больше нет")
             return
-        # Обновляем клавиатуру с новыми данными
-        equipment = load_equipment()
-        keyboard_buttons = []
-        for item, details in equipment[category].items():
-            total_available = details[0]
-            booked = booked_items.get(item, 0)
-            available = total_available - booked - items.get(item, 0) 
-            keyboard_buttons.append([KeyboardButton(text=f"{item} ({available} шт.)")])
-        
-        keyboard_buttons.append([KeyboardButton(text="Назад"), KeyboardButton(text="Готово")])
-        keyboard = ReplyKeyboardMarkup(keyboard=keyboard_buttons, resize_keyboard=True)
-        await message.answer("Выберите оборудование:", reply_markup=keyboard)
-    elif message.text == "Готово":
-        if not items:
-            await message.answer("Вы не выбрали ни одного оборудования.")
-        else:
-            await show_confirmation(message, state)
-    elif message.text == "Назад":
-        equipment = load_equipment()
-        await state.set_state(BookingState.choosing_category)
-        keyboard = ReplyKeyboardMarkup(
-            keyboard=[[KeyboardButton(text=cat)] for cat in equipment.keys()] +
-                     [[KeyboardButton(text="Изменить дату"), KeyboardButton(text="Отмена"), KeyboardButton(text="Готово")]],
-            resize_keyboard=True
-        )
-        await message.answer("Выберите категорию оборудования:", reply_markup=keyboard)
-    else:
-        await message.answer("Выберите оборудование из списка или нажмите 'Готово'.")
 
 # Обработка подтверждения бронирования
 @dp.message(BookingState.confirmation)

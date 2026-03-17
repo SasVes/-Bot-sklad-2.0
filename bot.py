@@ -166,7 +166,7 @@ async def choose_category(message: Message, state: FSMContext):
         booked_items = {}
         for booking in booked_equipment:
             for item_line in booking[0].split("\n"):
-                if " x" in item_line:
+    if " x" in item_line:
                     name, quantity = item_line.split(" x")
                     booked_items[name] = booked_items.get(name, 0) + int(quantity)
         

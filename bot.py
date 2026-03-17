@@ -253,7 +253,19 @@ async def choose_items(message: Message, state: FSMContext):
         if current_selected + already_booked < total_available:
             items[item_name] = current_selected + 1
             await state.update_data(items=items)
-            await message.answer(f"Добавлено: {item_name}")
+            keyboard_buttons = []
+            for item, details in equipment[category].items():
+                total_available = details[0]
+                booked = booked_items.get(item, 0)
+                selected = items.get(item, 0)
+                available = total_available - booked - selected
+                keyboard_buttons.append([
+                    KeyboardButton(text=f"{item} ({max(0, available)} шт.)")
+                ])
+            keyboard_buttons.append([KeyboardButton(text="Назад"), KeyboardButton(text="Готово")])
+            keyboard_buttons.append([KeyboardButton(text="Изменить дату")])
+            keyboard = ReplyKeyboardMarkup(keyboard=keyboard_buttons, resize_keyboard=True)
+            await message.answer("Выберите оборудование:", reply_markup=keyboard)
         else:
             await message.answer(f"{item_name} больше нет в наличии")
         

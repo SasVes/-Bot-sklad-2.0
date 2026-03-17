@@ -227,7 +227,7 @@ if items:
             reply_markup=keyboard,
             parse_mode="Markdown"
         )
-    else:
+else:
         await message.answer("Вы не выбрали ни одного оборудования.", reply_markup=keyboard)
     
 await state.set_state(BookingState.confirmation)

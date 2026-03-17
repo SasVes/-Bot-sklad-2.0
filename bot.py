@@ -496,14 +496,14 @@ async def confirm_booking(message: Message, state: FSMContext):
     items = data.get("items", {})
     
     # Рассчитываем общую стоимость и формируем данные для сохранения
-total_price = 0
-booking_details = []
-for item, quantity in items.items():
-    item_data = get_item_data(item)
-    if item_data:
-        price = item_data[1] * quantity
-        total_price += price
-        booking_details.append(f"{item} x{quantity}")
+    total_price = 0
+    booking_details = []
+    for item, quantity in items.items():
+        item_data = get_item_data(item)
+        if item_data:
+            price = item_data[1] * quantity
+            total_price += price
+            booking_details.append(f"{item} x{quantity}")
     
     # Сохраняем бронирование в базу данных
     cursor.execute(
@@ -513,15 +513,17 @@ for item, quantity in items.items():
     conn.commit()
     
     # Формируем сообщение с ценами для пользователя
-user_friendly_details = []
-for item, quantity in items.items():
-    item_data = get_item_data(item)
-    if item_data:
-        price = item_data[1] * quantity
-        user_friendly_details.append(f"{item} x{quantity} ({price} руб.)")
+    user_friendly_details = []
+    for item, quantity in items.items():
+        item_data = get_item_data(item)
+        if item_data:
+            price = item_data[1] * quantity
+            user_friendly_details.append(f"{item} x{quantity} ({price} руб.)")
     
     # Отправляем сообщение пользователю
-    await message.answer(f"Вы забронировали:\n" + "\n".join(user_friendly_details) + f"\nИтого: {total_price} руб.")
+    await message.answer(
+        f"Вы забронировали:\n" + "\n".join(user_friendly_details) + f"\nИтого: {total_price} руб."
+    )
     await message.answer("Бронирование завершено, спасибо!", reply_markup=main_menu_keyboard)
     await state.clear()
 

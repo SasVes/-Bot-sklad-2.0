@@ -221,7 +221,7 @@ for item, quantity in items.items():
         resize_keyboard=True
     )
     
-    if items:
+if items:
     await message.answer(
             f"Текущий заказ:\n{selected_items}\n\n*Итого: {total_price} руб.*\n\nВыберите действие:",
             reply_markup=keyboard,

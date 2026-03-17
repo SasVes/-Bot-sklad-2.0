@@ -268,25 +268,23 @@ async def choose_items(message: Message, state: FSMContext):
             await message.answer("Выберите оборудование:", reply_markup=keyboard)
         else:
             await message.answer(f"{item_name} больше нет в наличии")
-        
-        # Получаем список забронированного оборудования на эту дату
-        cursor.execute("SELECT equipment FROM bookings WHERE date = ?", (date,))
-        booked_equipment = cursor.fetchall()
-        booked_items = {}
-        for booking in booked_equipment:
-            for item_line in booking[0].split("\n"):
-                if " x" in item_line:
-                    name, quantity = item_line.split(" x")
-                    booked_items[name] = booked_items.get(name, 0) + int(quantity)
-        
-        # Проверяем доступное количество
-        total_available = equipment[category][item_name][0]
-        booked = booked_items.get(item_name, 0)
-        available = total_available - booked
-        current_selected = items.get(item_name, 0)
-        if current_selected >= available:
-            await message.answer("Больше нет")
             return
+    elif message.text == "Готово":
+        if not items:
+            await message.answer("Вы не выбрали ни одного оборудования.")
+        else:
+            await show_confirmation(message, state)
+    elif message.text == "Назад":
+        equipment = load_equipment()
+        await state.set_state(BookingState.choosing_category)
+        keyboard = ReplyKeyboardMarkup(
+            keyboard=[[KeyboardButton(text=cat)] for cat in equipment.keys()] +
+                     [[KeyboardButton(text="Изменить дату"), KeyboardButton(text="Отмена"), KeyboardButton(text="Готово")]],
+            resize_keyboard=True
+        )
+        await message.answer("Выберите категорию оборудования:", reply_markup=keyboard)
+    else:
+        await message.answer("Выберите оборудование из списка или нажмите 'Готово'.")
 
 # Обработка подтверждения бронирования
 @dp.message(BookingState.confirmation)

@@ -153,44 +153,44 @@ async def process_simple_calendar(callback_query: CallbackQuery, callback_data: 
 # Обработка выбора категории
 @dp.message(BookingState.choosing_category)
 async def choose_category(message: Message, state: FSMContext):
-   equipment = load_equipment()
-if message.text in equipment:
+    equipment = load_equipment()
+    if message.text in equipment:
         await state.update_data(category=message.text)
-    data = await state.get_data()
-    date = data.get("date")
-    
-    cursor.execute("SELECT equipment FROM bookings WHERE date = ?", (date,))
-    booked_equipment = cursor.fetchall()
-    booked_items = {}
-    for booking in booked_equipment:
-        for item_line in booking[0].split("\n"):
-            if " x" in item_line:
-                name, quantity = item_line.split(" x")
-                booked_items[name] = booked_items.get(name, 0) + int(quantity)
-    
-    keyboard_buttons = []
-    for item, details in equipment[message.text].items():
-        total_available = details[0]
-        booked = booked_items.get(item, 0)
-        available = total_available - booked
-        keyboard_buttons.append([KeyboardButton(text=f"{item} ({available} шт.)")])
-    
-    keyboard_buttons.append([KeyboardButton(text="Назад"), KeyboardButton(text="Готово")])
-    keyboard_buttons.append([KeyboardButton(text="Изменить дату")])
-    
-    keyboard = ReplyKeyboardMarkup(keyboard=keyboard_buttons, resize_keyboard=True)
-    await message.answer("Выберите оборудование:", reply_markup=keyboard)
-    await state.set_state(BookingState.choosing_items)
-elif message.text == "Изменить дату":
-    await state.set_state(BookingState.choosing_date)
-    await message.answer("Выберите дату бронирования:", reply_markup=await SimpleCalendar().start_calendar())
-elif message.text == "Отмена":
-    await state.clear()
-    await message.answer("Бронирование отменено.", reply_markup=main_menu_keyboard)
-elif message.text == "Готово":
-    await show_confirmation(message, state)
-else:
-    await message.answer("Выберите категорию из списка.")
+        data = await state.get_data()
+        date = data.get("date")
+        
+        cursor.execute("SELECT equipment FROM bookings WHERE date = ?", (date,))
+        booked_equipment = cursor.fetchall()
+        booked_items = {}
+        for booking in booked_equipment:
+            for item_line in booking[0].split("\n"):
+                if " x" in item_line:
+                    name, quantity = item_line.split(" x")
+                    booked_items[name] = booked_items.get(name, 0) + int(quantity)
+        
+        keyboard_buttons = []
+        for item, details in equipment[message.text].items():
+            total_available = details[0]
+            booked = booked_items.get(item, 0)
+            available = total_available - booked
+            keyboard_buttons.append([KeyboardButton(text=f"{item} ({available} шт.)")])
+        
+        keyboard_buttons.append([KeyboardButton(text="Назад"), KeyboardButton(text="Готово")])
+        keyboard_buttons.append([KeyboardButton(text="Изменить дату")])
+        
+        keyboard = ReplyKeyboardMarkup(keyboard=keyboard_buttons, resize_keyboard=True)
+        await message.answer("Выберите оборудование:", reply_markup=keyboard)
+        await state.set_state(BookingState.choosing_items)
+    elif message.text == "Изменить дату":
+        await state.set_state(BookingState.choosing_date)
+        await message.answer("Выберите дату бронирования:", reply_markup=await SimpleCalendar().start_calendar())
+    elif message.text == "Отмена":
+        await state.clear()
+        await message.answer("Бронирование отменено.", reply_markup=main_menu_keyboard)
+    elif message.text == "Готово":
+        await show_confirmation(message, state)
+    else:
+        await message.answer("Выберите категорию из списка.")
 
 # Функция для показа подтверждения бронирования
 async def show_confirmation(message: Message, state: FSMContext):

@@ -235,6 +235,27 @@ async def choose_items(message: Message, state: FSMContext):
     if message.text.split(" (")[0] in equipment[category]:
         item_name = message.text.split(" (")[0]  # Получаем название оборудования без количества
         date = data["date"]
+# Получаем уже забронированное количество
+        cursor.execute("SELECT equipment FROM bookings WHERE date = ?", (date,))
+        booked_equipment = cursor.fetchall()
+        booked_items = {}
+        for booking in booked_equipment:
+            for item_line in booking[0].split("\n"):
+                if " x" in item_line:
+                    name, quantity = item_line.split(" x")
+                    booked_items[name] = booked_items.get(name, 0) + int(quantity)
+        # Сколько уже выбрал пользователь
+        current_selected = items.get(item_name, 0)
+        # Всего доступно
+        total_available = equipment[category][item_name][0]
+        already_booked = booked_items.get(item_name, 0)
+        # Проверяем лимит
+        if current_selected + already_booked < total_available:
+            items[item_name] = current_selected + 1
+            await state.update_data(items=items)
+            await message.answer(f"Добавлено: {item_name}")
+        else:
+            await message.answer(f"{item_name} больше нет в наличии")
         
         # Получаем список забронированного оборудования на эту дату
         cursor.execute("SELECT equipment FROM bookings WHERE date = ?", (date,))

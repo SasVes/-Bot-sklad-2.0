@@ -228,9 +228,9 @@ if items:
             parse_mode="Markdown"
         )
     else:
-    await message.answer("Вы не выбрали ни одного оборудования.", reply_markup=keyboard)
+        await message.answer("Вы не выбрали ни одного оборудования.", reply_markup=keyboard)
     
-    await state.set_state(BookingState.confirmation)
+await state.set_state(BookingState.confirmation)
 
 # Обработка выбора оборудования
 @dp.message(BookingState.choosing_items)

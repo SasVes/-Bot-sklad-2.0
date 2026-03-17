@@ -117,6 +117,7 @@ async def start_booking(message: Message, state: FSMContext):
 # Обработка выбора даты из календаря
 @dp.callback_query(SimpleCalendarCallback.filter())
 async def process_simple_calendar(callback_query: CallbackQuery, callback_data: dict, state: FSMContext):
+    await callback_query.answer()
     selected, date = await SimpleCalendar().process_selection(callback_query, callback_data)
     if selected:
         # Преобразуем datetime.datetime в datetime.date

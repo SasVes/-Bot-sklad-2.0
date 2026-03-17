@@ -250,7 +250,7 @@ async def choose_items(message: Message, state: FSMContext):
         total_available = equipment[category][item_name][0]
         already_booked = booked_items.get(item_name, 0)
         # Проверяем лимит
-        if current_selected + already_booked < total_available:
+    if current_selected + already_booked < total_available:
             items[item_name] = current_selected + 1
             await state.update_data(items=items)
             keyboard_buttons = []
@@ -275,7 +275,7 @@ async def choose_items(message: Message, state: FSMContext):
             await message.answer("Вы не выбрали ни одного оборудования.")
         else:
             await show_confirmation(message, state)
-        elif message.text == "Назад":
+    elif message.text == "Назад":
         equipment = load_equipment()
         await state.set_state(BookingState.choosing_category)
         keyboard = ReplyKeyboardMarkup(

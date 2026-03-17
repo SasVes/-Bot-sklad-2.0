@@ -222,7 +222,7 @@ for item, quantity in items.items():
     )
     
     if items:
-        await message.answer(
+    await message.answer(
             f"Текущий заказ:\n{selected_items}\n\n*Итого: {total_price} руб.*\n\nВыберите действие:",
             reply_markup=keyboard,
             parse_mode="Markdown"

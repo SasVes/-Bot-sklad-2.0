@@ -34,7 +34,6 @@ async def load_equipment():
     github_url = os.getenv("GITHUB_JSON_URL")
     
     if github_url:
-        # Уникальная ссылка и жесткие заголовки сброса кэша
         timestamp = int(datetime.datetime.now().timestamp())
         no_cache_url = f"{github_url}?t={timestamp}"
         headers = {
@@ -48,30 +47,27 @@ async def load_equipment():
                     if response.status == 200:
                         text_data = await response.text()
                         
-                        # Проверяем, изменился ли текст
+                        # Если текст изменился — обновляем и пишем в лог
                         if text_data != LAST_JSON_CONTENT:
                             try:
                                 new_data = json.loads(text_data)
                                 EQUIPMENT_CACHE.clear()
                                 EQUIPMENT_CACHE.update(new_data)
                                 LAST_JSON_CONTENT = text_data
-                                logging.info("✅ БАЗА ОБНОВЛЕНА: Бот скачал новые данные с GitHub!")
+                                logging.info("✅ БАЗА ОБНОВЛЕНА: Данные с GitHub загружены.")
                             except json.JSONDecodeError as e:
-                                logging.error(f"❌ ОШИБКА JSON: Проверьте запятые. Ошибка: {e}")
-                        else:
-                            # Если файл остался прежним
-                            logging.info("🔄 Проверка GitHub: изменений не найдено.")
+                                logging.error(f"❌ ОШИБКА JSON: {e}")
                     else:
-                        logging.error(f"❌ Ссылка не работает (код {response.status}).")
+                        logging.error(f"❌ Ошибка ссылки (код {response.status}).")
         except Exception as e:
-            logging.error(f"❌ Ошибка интернета/сети: {e}")
+            logging.error(f"❌ Сетевая ошибка: {e}")
     else:
         try:
             with open("equipment.json", "r", encoding="utf-8") as f:
                 EQUIPMENT_CACHE.clear()
                 EQUIPMENT_CACHE.update(json.load(f))
         except Exception as e:
-            logging.error(f"❌ Не могу прочитать локальный файл: {e}")
+            logging.error(f"❌ Ошибка чтения локального файла: {e}")
 class BookingState(StatesGroup):
     choosing_start_date = State()
     choosing_end_date = State()
@@ -231,6 +227,9 @@ async def start(message: Message, state: FSMContext):
     await message.answer("Привет! Я бот для бронирования оборудования.", reply_markup=main_menu_keyboard)
 @dp.message(F.text == "Забронировать оборудование")
 async def start_booking(message: Message, state: FSMContext):
+    # 2. Мгновенно подтягиваем свежий JSON в момент старта бронирования
+    await load_equipment() 
+    
     await state.set_state(BookingState.choosing_start_date)
     await message.answer("Выберите дату НАЧАЛА бронирования:", reply_markup=await SimpleCalendar().start_calendar(
         year=datetime.datetime.now().year, month=datetime.datetime.now().month
@@ -623,7 +622,7 @@ async def on_startup():
     await init_db()
     
     # Проверка GitHub каждую минуту
-    scheduler.add_job(load_equipment, 'interval', seconds=60)
+    scheduler.add_job(load_equipment, 'interval', hours=2)
     scheduler.add_job(archive_past_bookings, 'cron', hour=0, minute=0)
     scheduler.start()
 async def on_shutdown():

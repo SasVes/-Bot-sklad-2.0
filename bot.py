@@ -4,6 +4,7 @@ import datetime
 import json
 import os
 import aiosqlite
+import aiohttp
 from aiogram import Bot, Dispatcher, F
 from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, CallbackQuery
 from aiogram.fsm.storage.memory import MemoryStorage

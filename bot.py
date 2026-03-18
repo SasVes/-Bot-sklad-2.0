@@ -155,24 +155,26 @@ async def process_simple_calendar(callback_query: CallbackQuery, callback_data: 
         cursor.execute("SELECT equipment FROM bookings WHERE date = ?", (date,))
         booked_equipment = cursor.fetchall()
         booked_items = {}# Обработка выбора категории
-@dp.message(BookingState.choosing_category)
-async def choose_category(message: Message, state: FSMContext):
-    equipment = load_equipment()
-    if message.text in equipment:
-        await state.update_data(category=message.text)
-        data = await state.get_data()
-        date = data.get("date")
-        msg_id = data.get("main_msg_id")
-        items = data.get("items", {})
-        # Получаем брони
-        cursor.execute("SELECT equipment FROM bookings WHERE date = ?", (date,))
-        booked_equipment = cursor.fetchall()
-        booked_items = {}
-        for booking in booked_equipment:
-            for item_line in booking[0].split("\n"):
-                if " x" in item_line:
-                    name, quantity = item_line.split(" x")
-                    booked_items[name] = booked_items.get(name, 0) + int(quantity)
+        @dp.message(BookingState.choosing_category)
+        async def choose_category(message: Message, state: FSMContext):
+            equipment = load_equipment()
+            if message.text in equipment:
+                data = await state.get_data()
+                items = data.get("items", {})
+                text, keyboard = build_cart_text_and_keyboard(items, message.text)
+                msg = await message.answer(text, reply_markup=keyboard)
+                await state.update_data(
+                    category=message.text,
+                    main_msg_id=msg.message_id,
+                    items=items
+                )
+        await state.set_state(BookingState.choosing_items)
+    elif message.text == "Изменить дату":
+        await state.set_state(BookingState.choosing_date)
+        await message.answer("Выберите дату:", reply_markup=await SimpleCalendar().start_calendar())
+    elif message.text == "Отмена":
+        await state.clear()
+        await message.answer("Отменено", reply_markup=main_menu_keyboard)
         # Клавиатура
         keyboard_buttons = []
         for item, details in equipment[message.text].items():
@@ -257,98 +259,39 @@ async def show_confirmation(message: Message, state: FSMContext):
     else:
         await message.answer("Вы не выбрали ни одного оборудования.", reply_markup=keyboard)
     await state.set_state(BookingState.confirmation)
-# Обработка выбора оборудования
-@dp.message(BookingState.choosing_items)
-async def choose_items(message: Message, state: FSMContext):
-    try:
-        await message.delete()
-    except:
-        pass
+
+@dp.callback_query(BookingState.choosing_items)
+async def handle_cart(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
-    msg_id = data.get("main_msg_id")
-    category = data["category"]
     items = data.get("items", {})
-    equipment = load_equipment()
-    category_items = items.get(category, {})
-    if message.text.split(" (")[0] in equipment[category]:
-        item_name = message.text.split(" (")[0]
-        date = data["date"]
-        # Брони
-        cursor.execute("SELECT equipment FROM bookings WHERE date = ?", (date,))
-        booked_equipment = cursor.fetchall()
-        booked_items = {}
-        for booking in booked_equipment:
-            for item_line in booking[0].split("\n"):
-                if " x" in item_line:
-                    parts = item_line.split(" x")
-                    if len(parts) == 2:
-                        name = parts[0]
-                        try:
-                            quantity = int(parts[1].split()[0])
-                        except:
-                            continue
-                        booked_items[name] = booked_items.get(name, 0) + quantity
-        current_selected = category_items.get(item_name, 0)
-        total_available = equipment[category][item_name][0]
-        already_booked = booked_items.get(item_name, 0)
-        if current_selected + already_booked < total_available:
-            category_items[item_name] = current_selected + 1
-            items[category] = category_items
-            await state.update_data(items=items)
-        else:
+    category = data.get("category")
+    action = callback.data
+    if action.startswith("add:"):
+        _, cat, item = action.split(":")
+        cat_items = items.get(cat, {})
+        cat_items[item] = cat_items.get(item, 0) + 1
+        items[cat] = cat_items
+    elif action.startswith("remove:"):
+        _, cat, item = action.split(":")
+        if cat in items and item in items[cat]:
+            if items[cat][item] > 1:
+                items[cat][item] -= 1
+            else:
+                del items[cat][item]
+                if not items[cat]:
+                    del items[cat]
+    elif action.startswith("cat:"):
+        _, category = action.split(":")
+    elif action == "done":
+        if not items:
+            await callback.answer("Корзина пустая", show_alert=True)
             return
-        # Клавиатура
-        keyboard_buttons = []
-        for item, details in equipment[category].items():
-            total = details[0]
-            booked = booked_items.get(item, 0)
-            selected = category_items.get(item, 0)
-            available = total - booked - selected
-            keyboard_buttons.append([
-                KeyboardButton(text=f"{item} ({max(0, available)} шт.)")
-            ])
-        keyboard_buttons.append([KeyboardButton(text="Назад"), KeyboardButton(text="Готово")])
-        keyboard_buttons.append([KeyboardButton(text="Изменить дату")])
-        keyboard = ReplyKeyboardMarkup(keyboard=keyboard_buttons, resize_keyboard=True)
-        # Смета
-        text = "📋 Ваша смета:\n\n"
-        total_price = 0
-        for cat, cat_items in items.items():
-            text += f"📦 {cat}:\n"
-            for item, qty in cat_items.items():
-                price = equipment[cat][item][1] * qty
-                total_price += price
-                text += f"{item} x{qty} — {price} руб.\n"
-            text += "\n"
-        if not items:
-            text += "Пока ничего не выбрано\n"
-        text += f"💰 Итого: {total_price} руб."
-        try:
-            await message.bot.edit_message_text(
-                chat_id=message.chat.id,
-                message_id=msg_id,
-                text=text,
-                reply_markup=keyboard
-            )
-        except:
-            msg = await message.answer(text, reply_markup=keyboard)
-            await state.update_data(main_msg_id=msg.message_id)
+        await show_confirmation(callback.message, state)
         return
-    elif message.text == "Готово":
-        if not items:
-            await message.answer("Вы не выбрали ни одного оборудования.")
-        else:
-            await show_confirmation(message, state)
-    elif message.text == "Назад":
-        await state.set_state(BookingState.choosing_category)
-        equipment = load_equipment()
-        keyboard = ReplyKeyboardMarkup(
-            keyboard=[[KeyboardButton(text=cat)] for cat in equipment.keys()] +
-                     [[KeyboardButton(text="Изменить дату"), KeyboardButton(text="Отмена"), KeyboardButton(text="Готово")]],
-            resize_keyboard=True
-        )
-        await message.answer("Выберите категорию оборудования:", reply_markup=keyboard)
-    else:
+    await state.update_data(items=items, category=category)
+    text, keyboard = build_cart_text_and_keyboard(items, category)
+    await callback.message.edit_text(text, reply_markup=keyboard)
+    await callback.answer()
         return
         
 # Обработка подтверждения бронирования
@@ -358,50 +301,35 @@ async def handle_confirmation(message: Message, state: FSMContext):
         await confirm_booking(message, state)
     elif message.text == "Добавить еще оборудование":
         await state.set_state(BookingState.choosing_category)
-        equipment = load_equipment()
-        keyboard = ReplyKeyboardMarkup(
-            keyboard=[[KeyboardButton(text=cat)] for cat in equipment.keys()] +
-                     [[KeyboardButton(text="Изменить дату"), KeyboardButton(text="Отмена"), KeyboardButton(text="Готово")]],
-            resize_keyboard=True
-        )
-        await message.answer("Выберите категорию оборудования:", reply_markup=keyboard)
-    elif message.text == "Удалить оборудование":
-        data = await state.get_data()
-        items = data.get("items", {})
-        if not items:
-            await message.answer("Нет оборудования для удаления.")
-        else:
-            keyboard_buttons = []
-            for item, quantity in items.items():
-                keyboard_buttons.append([KeyboardButton(text=f"{item} ({quantity} шт.)")])
-            
-            keyboard_buttons.append([KeyboardButton(text="Назад")])
-            keyboard = ReplyKeyboardMarkup(keyboard=keyboard_buttons, resize_keyboard=True)
-            await message.answer("Выберите оборудование для удаления:", reply_markup=keyboard)
-            await state.set_state(BookingState.removing_items)
+       def build_cart_text_and_keyboard(items, current_category):
+    equipment = load_equipment()
+    text = "📋 Ваша смета:\n\n"
+    total_price = 0
+    for category, cat_items in items.items():
+        text += f"📦 {category}:\n"
+        for item, qty in cat_items.items():
+            price = equipment[category][item][1] * qty
+            total_price += price
+            text += f"{item} x{qty} — {price} руб.\n"
+        text += "\n"
+    if not items:
+        text += "Пока ничего не выбрано\n\n"
+    text += f"💰 Итого: {total_price} руб.\n\n"
+    builder = InlineKeyboardBuilder()
+    for item in equipment[current_category]:
+        builder.button(text=f"➕ {item}", callback_data=f"add:{current_category}:{item}")
+        builder.button(text=f"➖ {item}", callback_data=f"remove:{current_category}:{item}")
+    builder.adjust(2)
+    for cat in equipment.keys():
+        builder.button(text=f"📂 {cat}", callback_data=f"cat:{cat}")
+    builder.button(text="✅ Готово", callback_data="done")
+    builder.adjust(2)
+    return text, builder.as_markup()
     elif message.text == "Отменить смету":  # Обработка новой кнопки
         await state.clear()
         await message.answer("Смета отменена. Вы вернулись в главное меню.", reply_markup=main_menu_keyboard)
     else:
         await message.answer("Используйте кнопки для выбора действия.")
-
-# Обработка удаления оборудования
-@dp.message(BookingState.removing_items)
-async def remove_items(message: Message, state: FSMContext):
-    data = await state.get_data()
-    items = data.get("items", {})
-    
-    if message.text.split(" (")[0] in items:  # Убираем " (X шт.)" для проверки
-        item_name = message.text.split(" (")[0]  # Получаем название оборудования без количества
-        
-        if items[item_name] > 1:
-            items[item_name] -= 1
-            await state.update_data(items=items)
-            await message.answer(f"Удалено: {item_name} ({items[item_name]} шт.)")
-        else:
-            del items[item_name]
-            await state.update_data(items=items)
-            await message.answer(f"Оборудование {item_name} полностью удалено")
         
         # Обновляем клавиатуру с новыми данными
         keyboard_buttons = []

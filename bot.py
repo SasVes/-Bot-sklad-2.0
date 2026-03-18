@@ -324,24 +324,14 @@ async def handle_confirmation(message: Message, state: FSMContext):
         await confirm_booking(message, state)
     elif message.text == "Добавить еще оборудование":
         await state.set_state(BookingState.choosing_category)
-    elif message.text == "Отменить смету":  # Обработка новой кнопки
+    elif message.text == "Отменить смету":
         await state.clear()
-        await message.answer("Смета отменена. Вы вернулись в главное меню.", reply_markup=main_menu_keyboard)
+        await message.answer(
+            "Смета отменена. Вы вернулись в главное меню.",
+            reply_markup=main_menu_keyboard
+        )
     else:
         await message.answer("Используйте кнопки для выбора действия.")
-        
-        # Обновляем клавиатуру с новыми данными
-        keyboard_buttons = []
-        for item, quantity in items.items():
-            keyboard_buttons.append([KeyboardButton(text=f"{item} ({quantity} шт.)")])
-        
-        keyboard_buttons.append([KeyboardButton(text="Назад")])
-        keyboard = ReplyKeyboardMarkup(keyboard=keyboard_buttons, resize_keyboard=True)
-        await message.answer("Выберите оборудование для удаления:", reply_markup=keyboard)
-    elif message.text == "Назад":
-        await show_confirmation(message, state)
-    else:
-        await message.answer("Используйте кнопки для выбора оборудования.")
 
 # Обработка нажатия на кнопку "Занятые даты"
 @dp.message(lambda message: message.text == "Занятые даты")

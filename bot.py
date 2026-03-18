@@ -152,7 +152,7 @@ async def start_booking(message: Message, state: FSMContext):
     year=datetime.datetime.now().year,
     month=datetime.datetime.now().month
 ))
-
+await state.set_state(BookingState.choosing_category)
 # Обработка выбора даты из календаря
 @dp.callback_query(SimpleCalendarCallback.filter())
 async def process_simple_calendar(callback_query: CallbackQuery, callback_data: dict, state: FSMContext):
@@ -165,9 +165,6 @@ async def process_simple_calendar(callback_query: CallbackQuery, callback_data: 
             return
         await state.update_data(date=selected_date.strftime("%Y-%m-%d"))
         await callback_query.message.answer(f"Вы выбрали дату: {selected_date.strftime('%Y-%m-%d')}")
-        
-        # Устанавливаем состояние выбора категории
-        await state.set_state(BookingState.choosing_category)
         
         # Создаем клавиатуру для выбора категории
         equipment = load_equipment()

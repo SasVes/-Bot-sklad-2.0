@@ -25,7 +25,7 @@ def get_item_data(item_name):
             return items[item_name]  # [кол-во, цена]
     return None
 
-        def build_cart_text_and_keyboard(items, current_category):
+def build_cart_text_and_keyboard(items, current_category):
     equipment = load_equipment()
     text = "📋 Ваша смета:\n\n"
     total_price = 0

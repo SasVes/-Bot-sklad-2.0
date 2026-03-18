@@ -48,7 +48,7 @@ main_menu_keyboard = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 # --- ФУНКЦИИ ДЛЯ ЖИВОГО ИНТЕРФЕЙСА ---
-def get_live_text(cart: dict, days: int, prompt: str) -> str:
+def get_live_text(cart: dict, days: int, prompt: str, is_final: bool = False) -> str:
     """Генерирует чистый текст с текущей сметой и подсказкой."""
     if not cart:
         return f"🛒 *Смета пока пуста*\n〰️〰️〰️〰️〰️〰️〰️\n{prompt}"
@@ -56,7 +56,10 @@ def get_live_text(cart: dict, days: int, prompt: str) -> str:
     receipt_text, base_total = generate_receipt(cart)
     final_total = base_total * days
     
-    return (f"🛒 *Предварительная смета:*\n{receipt_text}\n\n"
+    # Меняем заголовок в зависимости от того, финальная ли это стадия
+    title = "Смета" if is_final else "Предварительная смета"
+    
+    return (f"🛒 *{title}:*\n{receipt_text}\n\n"
             f"💰 *Итого: {final_total} руб.* ({days} дн.)\n"
             f"〰️〰️〰️〰️〰️〰️〰️\n"
             f"{prompt}")

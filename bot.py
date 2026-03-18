@@ -162,8 +162,9 @@ async def choose_category(message: Message, state: FSMContext):
         await state.update_data(category=message.text)
         data = await state.get_data()
         date = data.get("date")
-        
-        cursor.execute("SELECT equ
+        cursor.execute("SELECT equipment FROM bookings WHERE date = ?", (date,))
+        booked_equipment = cursor.fetchall()
+        booked_items = {}
         for booking in booked_equipment:
             for item_line in booking[0].split("\n"):
                 if " x" in item_line:

@@ -350,24 +350,6 @@ async def choose_items(message: Message, state: FSMContext):
         await message.answer("Выберите категорию оборудования:", reply_markup=keyboard)
     else:
         return
-    # ✅ Готово
-    elif message.text == "Готово":
-        if not items:
-            await message.answer("Вы не выбрали ни одного оборудования.")
-        else:
-            await show_confirmation(message, state)
-    # ✅ Назад
-    elif message.text == "Назад":
-        await state.set_state(BookingState.choosing_category)
-        keyboard = ReplyKeyboardMarkup(
-            keyboard=[[KeyboardButton(text=cat)] for cat in equipment.keys()] +
-                     [[KeyboardButton(text="Изменить дату"), KeyboardButton(text="Отмена"), KeyboardButton(text="Готово")]],
-            resize_keyboard=True
-        )
-        await message.answer("Выберите категорию оборудования:", reply_markup=keyboard)
-    # ✅ Ошибка
-    else:
-        await message.answer("Выберите оборудование из списка или нажмите 'Готово'.")
         
 # Обработка подтверждения бронирования
 @dp.message(BookingState.confirmation)

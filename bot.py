@@ -25,6 +25,31 @@ def get_item_data(item_name):
             return items[item_name]  # [кол-во, цена]
     return None
 
+        def build_cart_text_and_keyboard(items, current_category):
+    equipment = load_equipment()
+    text = "📋 Ваша смета:\n\n"
+    total_price = 0
+    for category, cat_items in items.items():
+        text += f"📦 {category}:\n"
+        for item, qty in cat_items.items():
+            price = equipment[category][item][1] * qty
+            total_price += price
+            text += f"{item} x{qty} — {price} руб.\n"
+        text += "\n"
+    if not items:
+        text += "Пока ничего не выбрано\n\n"
+    text += f"💰 Итого: {total_price} руб.\n\n"
+    builder = InlineKeyboardBuilder()
+    for item in equipment[current_category]:
+        builder.button(text=f"➕ {item}", callback_data=f"add:{current_category}:{item}")
+        builder.button(text=f"➖ {item}", callback_data=f"remove:{current_category}:{item}")
+    builder.adjust(2)
+    for cat in equipment.keys():
+        builder.button(text=f"📂 {cat}", callback_data=f"cat:{cat}")
+    builder.button(text="✅ Готово", callback_data="done")
+    builder.adjust(2)
+    return text, builder.as_markup()
+
 # Загружаем переменные из .env
 load_dotenv()
 
@@ -262,30 +287,6 @@ async def show_confirmation(message: Message, state: FSMContext):
 
 @dp.callback_query(BookingState.choosing_items)
 async def handle_cart(callback: CallbackQuery, state: FSMContext):
-     def build_cart_text_and_keyboard(items, current_category):
-    equipment = load_equipment()
-    text = "📋 Ваша смета:\n\n"
-    total_price = 0
-    for category, cat_items in items.items():
-        text += f"📦 {category}:\n"
-        for item, qty in cat_items.items():
-            price = equipment[category][item][1] * qty
-            total_price += price
-            text += f"{item} x{qty} — {price} руб.\n"
-        text += "\n"
-    if not items:
-        text += "Пока ничего не выбрано\n\n"
-    text += f"💰 Итого: {total_price} руб.\n\n"
-    builder = InlineKeyboardBuilder()
-    for item in equipment[current_category]:
-        builder.button(text=f"➕ {item}", callback_data=f"add:{current_category}:{item}")
-        builder.button(text=f"➖ {item}", callback_data=f"remove:{current_category}:{item}")
-    builder.adjust(2)
-    for cat in equipment.keys():
-        builder.button(text=f"📂 {cat}", callback_data=f"cat:{cat}")
-    builder.button(text="✅ Готово", callback_data="done")
-    builder.adjust(2)
-    return text, builder.as_markup()
     data = await state.get_data()
     items = data.get("items", {})
     category = data.get("category")

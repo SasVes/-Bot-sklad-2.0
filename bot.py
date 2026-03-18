@@ -292,7 +292,6 @@ async def handle_cart(callback: CallbackQuery, state: FSMContext):
     text, keyboard = build_cart_text_and_keyboard(items, category)
     await callback.message.edit_text(text, reply_markup=keyboard)
     await callback.answer()
-        return
         
 # Обработка подтверждения бронирования
 @dp.message(BookingState.confirmation)

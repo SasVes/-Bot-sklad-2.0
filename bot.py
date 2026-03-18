@@ -34,36 +34,42 @@ async def load_equipment():
     github_url = os.getenv("GITHUB_JSON_URL")
     
     if github_url:
-        # Обман кэша GitHub: добавляем к ссылке текущее время в секундах
+        # Уникальная ссылка и жесткие заголовки сброса кэша
         timestamp = int(datetime.datetime.now().timestamp())
         no_cache_url = f"{github_url}?t={timestamp}"
+        headers = {
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache"
+        }
         
         try:
             async with aiohttp.ClientSession() as session:
-                # Отправляем запрос по уникальной ссылке
-                async with session.get(no_cache_url) as response:
+                async with session.get(no_cache_url, headers=headers) as response:
                     if response.status == 200:
                         text_data = await response.text()
+                        
+                        # Проверяем, изменился ли текст
                         if text_data != LAST_JSON_CONTENT:
                             try:
                                 new_data = json.loads(text_data)
                                 EQUIPMENT_CACHE.clear()
                                 EQUIPMENT_CACHE.update(new_data)
                                 LAST_JSON_CONTENT = text_data
-                                logging.info("✅ Оборудование мгновенно обновлено с GitHub!")
+                                logging.info("✅ БАЗА ОБНОВЛЕНА: Бот скачал новые данные с GitHub!")
                             except json.JSONDecodeError as e:
-                                logging.error(f"❌ ОШИБКА JSON: Проверьте запятые и кавычки. Ошибка: {e}")
+                                logging.error(f"❌ ОШИБКА JSON: Проверьте запятые. Ошибка: {e}")
+                        else:
+                            # Если файл остался прежним
+                            logging.info("🔄 Проверка GitHub: изменений не найдено.")
                     else:
                         logging.error(f"❌ Ссылка не работает (код {response.status}).")
         except Exception as e:
             logging.error(f"❌ Ошибка интернета/сети: {e}")
     else:
-        # Если ссылки нет, читаем с диска
         try:
             with open("equipment.json", "r", encoding="utf-8") as f:
                 EQUIPMENT_CACHE.clear()
                 EQUIPMENT_CACHE.update(json.load(f))
-                logging.info("📂 Ссылка на GitHub не найдена, загружен локальный файл.")
         except Exception as e:
             logging.error(f"❌ Не могу прочитать локальный файл: {e}")
 class BookingState(StatesGroup):

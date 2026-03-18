@@ -30,7 +30,6 @@ MSK_TZ = datetime.timezone(datetime.timedelta(hours=3))
 # --- ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ И ЗАГРУЗКА ---
 EQUIPMENT_CACHE = {}
 LAST_JSON_CONTENT = ""
-# Группы взаимоисключающего оборудования
 EXCLUSION_GROUPS = [
     {"Интеркомы 6шт", "Интеркомы 4шт", "Интеркомы 2шт"}
 ]
@@ -84,12 +83,13 @@ class BookingState(StatesGroup):
 class DeletingBookingState(StatesGroup):
     choosing_booking_to_delete = State()
 # --- КЛАВИАТУРЫ ---
+# ИЗМЕНЕНО: удалена кнопка "Удалить бронь" из главного меню
 main_menu_keyboard = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="Забронировать оборудование")],
         [KeyboardButton(text="Занятые даты")],
         [KeyboardButton(text="Мои бронирования"), KeyboardButton(text="Все бронирования")],
-        [KeyboardButton(text="Удалить бронь"), KeyboardButton(text="Архив бронирований")]
+        [KeyboardButton(text="Архив бронирований")]
     ],
     resize_keyboard=True
 )
@@ -151,11 +151,9 @@ def generate_receipt(cart: dict) -> tuple[str, int]:
 def get_live_text(cart: dict, days: int, prompt: str, is_final: bool = False) -> str:
     if not cart:
         return f"🛒 *Смета пока пуста*\n〰️〰️〰️〰️〰️〰️〰️\n{prompt}"
-    
     receipt_text, base_total = generate_receipt(cart)
     final_total = base_total * days
     title = "Смета" if is_final else "Предварительная смета"
-    
     return (f"🛒 *{title}:*\n{receipt_text}\n\n💰 *Итого: {final_total} руб.* ({days} дн.)\n〰️〰️〰️〰️〰️〰️〰️\n{prompt}")
 async def refresh_menu(message: Message, state: FSMContext, text: str, keyboard: ReplyKeyboardMarkup):
     data = await state.get_data()
@@ -186,12 +184,10 @@ async def get_max_booked_in_range(start_date_str: str, end_date_str: str, exclud
             query = "SELECT id, items_json FROM bookings WHERE start_date <= ? AND end_date >= ?"
             async with db.execute(query, (current_day_str, current_day_str)) as cursor:
                 async for row in cursor:
-                    if exclude_id and row[0] == exclude_id:
-                        continue
+                    if exclude_id and row[0] == exclude_id: continue
                     items = json.loads(row[1])
                     for item_name, qty in items.items():
                         booked_today[item_name] = booked_today.get(item_name, 0) + qty
-            
             for item_name, qty in booked_today.items():
                 max_booked[item_name] = max(max_booked.get(item_name, 0), qty)
     return max_booked
@@ -230,15 +226,21 @@ async def process_calendar(callback_query: CallbackQuery, callback_data: dict, s
         
         if current_state == BookingState.choosing_start_date.state:
             if selected_date < today:
-                await callback_query.message.answer("❌ Нельзя выбрать прошедшую дату. Пожалуйста, выберите актуальную:", reply_markup=await SimpleCalendar().start_calendar(year=now.year, month=now.month))
+                await callback_query.message.answer(
+                    text="❌ Нельзя выбрать прошедшую дату. Пожалуйста, выберите актуальную:", 
+                    reply_markup=await SimpleCalendar().start_calendar(year=now.year, month=now.month)
+                )
                 return
             
             data = await state.get_data()
             editing_id = data.get("editing_booking_id")
-            start_date_str = selected_date.strftime("%Y-%m-%d")
+            # ИЗМЕНЕНО: Не затираем корзину, если юзер решил просто сменить даты
+            existing_cart = data.get("items", {}) 
             
-            await state.update_data(start_date=start_date_str, items={}, editing_booking_id=editing_id)
+            start_date_str = selected_date.strftime("%Y-%m-%d")
+            await state.update_data(start_date=start_date_str, items=existing_cart, editing_booking_id=editing_id)
             await state.set_state(BookingState.choosing_end_date)
+            
             await bot.edit_message_text(
                 text=f"Начало аренды: {start_date_str}\n\nТеперь выберите дату ОКОНЧАНИЯ бронирования:", 
                 chat_id=callback_query.message.chat.id, 
@@ -248,20 +250,59 @@ async def process_calendar(callback_query: CallbackQuery, callback_data: dict, s
             
         elif current_state == BookingState.choosing_end_date.state:
             data = await state.get_data()
-            start_date_obj = datetime.datetime.strptime(data["start_date"], "%Y-%m-%d").date()
+            start_date_str = data["start_date"]
+            start_date_obj = datetime.datetime.strptime(start_date_str, "%Y-%m-%d").date()
+            edit_id = data.get("editing_booking_id")
+            old_cart = data.get("items", {})
+            
             if selected_date < start_date_obj:
-                await bot.edit_message_text("❌ Дата окончания не может быть раньше даты начала! Выберите корректную дату:", callback_query.message.chat.id, callback_query.message.message_id, reply_markup=await SimpleCalendar().start_calendar(year=start_date_obj.year, month=start_date_obj.month))
+                await bot.edit_message_text(
+                    text="❌ Дата окончания не может быть раньше даты начала! Выберите корректную дату:", 
+                    chat_id=callback_query.message.chat.id, 
+                    message_id=callback_query.message.message_id, 
+                    reply_markup=await SimpleCalendar().start_calendar(year=start_date_obj.year, month=start_date_obj.month)
+                )
                 return
                 
             end_date_str = selected_date.strftime("%Y-%m-%d")
             days_count = (selected_date - start_date_obj).days + 1
-            await state.update_data(end_date=end_date_str, days_count=days_count)
             
+            warning_text = ""
+            # ИЗМЕНЕНО: Проверка сметы после смены дат
+            if old_cart:
+                booked_db = await get_max_booked_in_range(start_date_str, end_date_str, edit_id)
+                new_cart = {}
+                for item, qty in old_cart.items():
+                    total_avail = 0
+                    for cat_items in EQUIPMENT_CACHE.values():
+                        if item in cat_items:
+                            total_avail = cat_items[item][0]
+                            break
+                    
+                    avail_now = total_avail - booked_db.get(item, 0)
+                    if avail_now < qty:
+                        if avail_now > 0:
+                            new_cart[item] = avail_now
+                            warning_text += f"\n⚠️ {item}: снижено до {avail_now} шт."
+                        else:
+                            warning_text += f"\n❌ {item}: больше нет на эти даты."
+                    else:
+                        new_cart[item] = qty
+                        
+                old_cart = new_cart
+                
+            await state.update_data(end_date=end_date_str, days_count=days_count, items=old_cart)
             await state.set_state(BookingState.choosing_category)
-            keyboard = get_categories_keyboard(data.get("items", {}))
-            text = get_live_text(data.get("items", {}), days_count, "📂 Выберите категорию оборудования:")
-            await bot.delete_message(callback_query.message.chat.id, callback_query.message.message_id)
-            new_msg = await bot.send_message(callback_query.message.chat.id, text, reply_markup=keyboard, parse_mode="Markdown")
+            keyboard = get_categories_keyboard(old_cart)
+            
+            prompt = "📂 Выберите категорию оборудования:"
+            if warning_text:
+                prompt = f"Из-за смены дат состав сметы скорректирован:{warning_text}\n\n📂 Продолжите выбор или нажмите Готово:"
+                
+            text = get_live_text(old_cart, days_count, prompt)
+            
+            await bot.delete_message(chat_id=callback_query.message.chat.id, message_id=callback_query.message.message_id)
+            new_msg = await bot.send_message(chat_id=callback_query.message.chat.id, text=text, reply_markup=keyboard, parse_mode="Markdown")
             await state.update_data(menu_msg_id=new_msg.message_id)
 @dp.message(BookingState.choosing_category)
 async def choose_category(message: Message, state: FSMContext):
@@ -392,7 +433,7 @@ async def handle_confirmation(message: Message, state: FSMContext):
         
     elif message.text == "Добавить еще":
         await state.set_state(BookingState.choosing_category)
-        text = get_live_text(cart, days, "📂 Выберите категори оборудования:")
+        text = get_live_text(cart, days, "📂 Выберите категорию оборудования:")
         await refresh_menu(message, state, text, get_categories_keyboard(cart))
         
     elif message.text == "Удалить из списка":
@@ -412,7 +453,7 @@ async def handle_confirmation(message: Message, state: FSMContext):
         except: pass
         await state.set_state(BookingState.choosing_start_date)
         now = datetime.datetime.now(MSK_TZ)
-        await message.answer("⚠️ Сброс параметров.\n\nВыберите новую дату НАЧАЛА:", reply_markup=await SimpleCalendar().start_calendar(
+        await message.answer("⚠️ Выбор новых дат (ваша корзина сохранена).\n\nВыберите новую дату НАЧАЛА:", reply_markup=await SimpleCalendar().start_calendar(
             year=now.year, month=now.month
         ))
                              
@@ -534,8 +575,12 @@ async def show_my_bookings_for_edit(message: Message):
         
         text = f"📋 *Бронь #{b_id}*\n{date_str}\n📦 {items_str}\n💵 {total_price} руб."
         
+        # ИЗМЕНЕНО: Добавлена кнопка удаления рядом с кнопкой изменения
         builder = InlineKeyboardBuilder()
-        builder.button(text="✏️ Изменить смету", callback_data=f"edit_booking_{b_id}")
+        builder.button(text="✏️ Изменить", callback_data=f"edit_booking_{b_id}")
+        builder.button(text="❌ Удалить", callback_data=f"del_{b_id}")
+        builder.adjust(2) # Ставим кнопки в один ряд параллельно
+        
         await message.answer(text, parse_mode="Markdown", reply_markup=builder.as_markup())
 @dp.callback_query(F.data.startswith("edit_booking_"))
 async def process_edit_booking(callback: CallbackQuery, state: FSMContext):
@@ -553,7 +598,6 @@ async def process_edit_booking(callback: CallbackQuery, state: FSMContext):
     start_date, end_date, days_count, items_json = row
     cart = json.loads(items_json)
     
-    # Загружаем бронь в стейт ("корзину")
     await state.update_data(
         start_date=start_date,
         end_date=end_date,
@@ -570,6 +614,32 @@ async def process_edit_booking(callback: CallbackQuery, state: FSMContext):
     new_msg = await bot.send_message(callback.message.chat.id, text, reply_markup=keyboard, parse_mode="Markdown")
     await state.update_data(menu_msg_id=new_msg.message_id)
     await callback.answer()
+@dp.callback_query(F.data.startswith("del_"))
+async def process_delete(callback: CallbackQuery, state: FSMContext):
+    b_id = int(callback.data.split("_")[1])
+    
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute("SELECT start_date, end_date, items_json FROM bookings WHERE id = ? AND user_id = ?", (b_id, callback.from_user.id)) as cursor:
+            row = await cursor.fetchone()
+            
+        if not row:
+            await callback.answer("Бронь уже удалена или не найдена.", show_alert=True)
+            return
+            
+        await db.execute("DELETE FROM bookings WHERE id = ?", (b_id,))
+        await db.commit()
+    
+    items = json.loads(row[2])
+    items_str = "\n".join([f"▫️ {k} x{v}" for k, v in items.items()])
+    period_str = f"{row[0]}" if row[0] == row[1] else f"{row[0]} — {row[1]}"
+    
+    # ИЗМЕНЕНО: Не удаляем сообщение, а красиво гасим кнопки, чтобы они больше не нажимались
+    try: 
+        await callback.message.edit_text(f"🗑 *УДАЛЕНО*\nБронь на {period_str} отменена.", parse_mode="Markdown")
+    except: pass
+    await state.clear()
+    
+    await send_notification(f"❌ *Бронь отменена!*\n\n📅 Период: {period_str}\n👤 @{callback.from_user.username}\nОсвобождено:\n{items_str}")
 @dp.message(F.text.in_({"Все бронирования", "Архив бронирований"}))
 async def text_reports(message: Message):
     is_archive = message.text == "Архив бронирований"
@@ -589,53 +659,6 @@ async def text_reports(message: Message):
         report += f"👤 @{b[0]}\n{date_str}\n📦 {items_str}\n💵 {b[5]} руб.\n—\n"
         
     await message.answer(report, parse_mode="Markdown")
-@dp.message(F.text == "Удалить бронь")
-async def start_deleting(message: Message, state: FSMContext):
-    async with aiosqlite.connect(DB_PATH) as db:
-        async with db.execute("SELECT id, start_date, end_date, items_json FROM bookings WHERE user_id = ?", (message.from_user.id,)) as cursor:
-            bookings = await cursor.fetchall()
-            
-    if not bookings:
-        await message.answer("У вас нет активных бронирований.")
-        return
-        
-    builder = InlineKeyboardBuilder()
-    for b in bookings:
-        b_id, start_date, end_date, items_json = b
-        items = json.loads(items_json)
-        short_names = list(items.keys())[:2]
-        period = start_date if start_date == end_date else f"{start_date}—{end_date}"
-        title = f"{period} | {', '.join(short_names)}..."
-        builder.button(text=title, callback_data=f"del_{b_id}")
-        
-    builder.adjust(1)
-    await message.answer("Выберите запись для отмены:", reply_markup=builder.as_markup())
-    await state.set_state(DeletingBookingState.choosing_booking_to_delete)
-@dp.callback_query(DeletingBookingState.choosing_booking_to_delete, F.data.startswith("del_"))
-async def process_delete(callback: CallbackQuery, state: FSMContext):
-    b_id = int(callback.data.split("_")[1])
-    
-    async with aiosqlite.connect(DB_PATH) as db:
-        async with db.execute("SELECT start_date, end_date, items_json FROM bookings WHERE id = ? AND user_id = ?", (b_id, callback.from_user.id)) as cursor:
-            row = await cursor.fetchone()
-            
-        if not row:
-            await callback.message.answer("Бронь не найдена.")
-            return
-            
-        await db.execute("DELETE FROM bookings WHERE id = ?", (b_id,))
-        await db.commit()
-    
-    items = json.loads(row[2])
-    items_str = "\n".join([f"▫️ {k} x{v}" for k, v in items.items()])
-    period_str = f"{row[0]}" if row[0] == row[1] else f"{row[0]} — {row[1]}"
-    
-    await callback.message.answer("Бронирование удалено ✅", reply_markup=main_menu_keyboard)
-    try: await callback.message.delete()
-    except: pass
-    await state.clear()
-    
-    await send_notification(f"❌ *Бронь отменена!*\n\n📅 Период: {period_str}\n👤 @{callback.from_user.username}\nОсвобождено:\n{items_str}")
 # --- ЗАПУСК БОТА ---
 async def on_startup():
     logging.info("Инициализация БД и загрузка конфигурации...")

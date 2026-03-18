@@ -235,34 +235,41 @@ async def choose_items(message: Message, state: FSMContext):
     category = data["category"]
     items = data.get("items", {})
     equipment = load_equipment()
-    # Убираем " (X шт.)" для проверки
-if message.text.split(" (")[0] in equipment[category]:
-    item_name = message.text.split(" (")[0]
-    date = data["date"]
-    # Получаем уже забронированное количество
-    cursor.execute("SELECT equipment FROM bookings WHERE date = ?", (date,))
-    booked_equipment = cursor.fetchall()
-    booked_items = {}
-    for booking in booked_equipment:
-        for item_line in booking[0].split("\n"):
-            if " x" in item_line:
-                name, quantity = item_line.split(" x")
-                booked_items[name] = booked_items.get(name, 0) + int(quantity)
-    # Сколько уже выбрал пользователь
-    current_selected = items.get(item_name, 0)
-    # Всего доступно
-    total_available = equipment[category][item_name][0]
-    already_booked = booked_items.get(item_name, 0)
-    # ✅ ВОТ ЭТОТ if ДОЛЖЕН БЫТЬ ВНУТРИ
-    if current_selected + already_booked < total_available:
-        items[item_name] = current_selected + 1
-        await state.update_data(items=items)
+    # ✅ Выбор оборудования
+    if message.text.split(" (")[0] in equipment[category]:
+        item_name = message.text.split(" (")[0]
+        date = data["date"]
+        # Получаем брони
+        cursor.execute("SELECT equipment FROM bookings WHERE date = ?", (date,))
+        booked_equipment = cursor.fetchall()
+        booked_items = {}
+        for booking in booked_equipment:
+            for item_line in booking[0].split("\n"):
+                if " x" in item_line:
+                    parts = item_line.split(" x")
+                    if len(parts) == 2:
+                        name = parts[0]
+                        try:
+                            quantity = int(parts[1].split()[0])
+                        except:
+                            continue
+                        booked_items[name] = booked_items.get(name, 0) + quantity
+        current_selected = items.get(item_name, 0)
+        total_available = equipment[category][item_name][0]
+        already_booked = booked_items.get(item_name, 0)
+        if current_selected + already_booked < total_available:
+            items[item_name] = current_selected + 1
+            await state.update_data(items=items)
+        else:
+            await message.answer(f"{item_name} больше нет в наличии")
+            return
+        # ✅ Обновляем клавиатуру
         keyboard_buttons = []
         for item, details in equipment[category].items():
-            total_available = details[0]
+            total = details[0]
             booked = booked_items.get(item, 0)
             selected = items.get(item, 0)
-            available = total_available - booked - selected
+            available = total - booked - selected
             keyboard_buttons.append([
                 KeyboardButton(text=f"{item} ({max(0, available)} шт.)")
             ])
@@ -271,16 +278,14 @@ if message.text.split(" (")[0] in equipment[category]:
         keyboard = ReplyKeyboardMarkup(keyboard=keyboard_buttons, resize_keyboard=True)
         await message.answer("Выберите оборудование:", reply_markup=keyboard)
         return
-        await message.answer(f"{item_name} больше нет в наличии")
-        return
-    else:
-        elif message.text == "Готово":
-    if not items:
+    # ✅ Готово
+    elif message.text == "Готово":
+        if not items:
             await message.answer("Вы не выбрали ни одного оборудования.")
         else:
             await show_confirmation(message, state)
-        elif message.text == "Назад":
-        equipment = load_equipment()
+    # ✅ Назад
+    elif message.text == "Назад":
         await state.set_state(BookingState.choosing_category)
         keyboard = ReplyKeyboardMarkup(
             keyboard=[[KeyboardButton(text=cat)] for cat in equipment.keys()] +
@@ -288,9 +293,10 @@ if message.text.split(" (")[0] in equipment[category]:
             resize_keyboard=True
         )
         await message.answer("Выберите категорию оборудования:", reply_markup=keyboard)
-        else:
+    # ✅ Ошибка ввода
+    else:
         await message.answer("Выберите оборудование из списка или нажмите 'Готово'.")
-
+        
 # Обработка подтверждения бронирования
 @dp.message(BookingState.confirmation)
 async def handle_confirmation(message: Message, state: FSMContext):

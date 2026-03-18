@@ -153,7 +153,9 @@ async def process_simple_calendar(callback_query: CallbackQuery, callback_data: 
         )
         await callback_query.message.answer("Выберите категорию оборудования:", reply_markup=keyboard)
 
-# Обработка выбора категории
+ipment FROM bookings WHERE date = ?", (date,))
+        booked_equipment = cursor.fetchall()
+        booked_items = {}# Обработка выбора категории
 @dp.message(BookingState.choosing_category)
 async def choose_category(message: Message, state: FSMContext):
     equipment = load_equipment()
@@ -162,9 +164,7 @@ async def choose_category(message: Message, state: FSMContext):
         data = await state.get_data()
         date = data.get("date")
         
-        cursor.execute("SELECT equipment FROM bookings WHERE date = ?", (date,))
-        booked_equipment = cursor.fetchall()
-        booked_items = {}
+        cursor.execute("SELECT equ
         for booking in booked_equipment:
             for item_line in booking[0].split("\n"):
                 if " x" in item_line:
@@ -182,7 +182,8 @@ async def choose_category(message: Message, state: FSMContext):
         keyboard_buttons.append([KeyboardButton(text="Изменить дату")])
         
         keyboard = ReplyKeyboardMarkup(keyboard=keyboard_buttons, resize_keyboard=True)
-        await message.answer("Выберите оборудование:", reply_markup=keyboard)
+        msg = await message.answer(...)
+        await state.update_data(main_msg_id=msg.message_id)
         await state.set_state(BookingState.choosing_items)
     elif message.text == "Изменить дату":
         await state.set_state(BookingState.choosing_date)
@@ -226,20 +227,20 @@ async def show_confirmation(message: Message, state: FSMContext):
     else:
         await message.answer("Вы не выбрали ни одного оборудования.", reply_markup=keyboard)
     await state.set_state(BookingState.confirmation)
-
 # Обработка выбора оборудования
 @dp.message(BookingState.choosing_items)
 async def choose_items(message: Message, state: FSMContext):
+    # Удаляем сообщение пользователя
     try:
-    await message.delete()
-except:
-    pass
+        await message.delete()
+    except:
+        pass
     data = await state.get_data()
     msg_id = data.get("main_msg_id")
     category = data["category"]
     items = data.get("items", {})
     equipment = load_equipment()
-    # ✅ Выбор оборудования
+    # ✅ Если выбрали оборудование
     if message.text.split(" (")[0] in equipment[category]:
         item_name = message.text.split(" (")[0]
         date = data["date"]
@@ -265,9 +266,9 @@ except:
             items[item_name] = current_selected + 1
             await state.update_data(items=items)
         else:
-            await message.answer(f"{item_name} больше нет")
+            await message.answer(f"{item_name} больше нет в наличии")
             return
-        # ✅ Обновляем клавиатуру
+        # ✅ Клавиатура
         keyboard_buttons = []
         for item, details in equipment[category].items():
             total = details[0]
@@ -280,32 +281,32 @@ except:
         keyboard_buttons.append([KeyboardButton(text="Назад"), KeyboardButton(text="Готово")])
         keyboard_buttons.append([KeyboardButton(text="Изменить дату")])
         keyboard = ReplyKeyboardMarkup(keyboard=keyboard_buttons, resize_keyboard=True)
-        msg = text = "📋 Ваша смета:\n\n"
+        # ✅ Смета
+        text = "📋 Ваша смета:\n\n"
         total_price = 0
         for item, qty in items.items():
             price = equipment[category][item][1] * qty
             total_price += price
             text += f"{item} x{qty} — {price} руб.\n"
-            if not items:
-                text += "Пока ничего не выбрано\n"
-                text += f"\n💰 Итого: {total_price} руб."
-                # Обновляем сообщение
-    try:
-        await message.bot.edit_message_text(
-        chat_id=message.chat.id,
-        message_id=msg_id,
-        text=text,
-        reply_markup=keyboard
-    )
-except:
-    msg = await message.answer(text, reply_markup=keyboard)
-    await state.update_data(main_msg_id=msg.message_id)
-        await state.update_data(main_msg_id=msg.message_id)
+        if not items:
+            text += "Пока ничего не выбрано\n"
+        text += f"\n💰 Итого: {total_price} руб."
+        # ✅ Обновляем сообщение
+        try:
+            await message.bot.edit_message_text(
+                chat_id=message.chat.id,
+                message_id=msg_id,
+                text=text,
+                reply_markup=keyboard
+            )
+        except:
+            msg = await message.answer(text, reply_markup=keyboard)
+            await state.update_data(main_msg_id=msg.message_id)
         return
     # ✅ Готово
     elif message.text == "Готово":
         if not items:
-            await message.answer("Вы не выбрали ничего.")
+            await message.answer("Вы не выбрали ни одного оборудования.")
         else:
             await show_confirmation(message, state)
     # ✅ Назад
@@ -316,8 +317,8 @@ except:
                      [[KeyboardButton(text="Изменить дату"), KeyboardButton(text="Отмена"), KeyboardButton(text="Готово")]],
             resize_keyboard=True
         )
-        await message.answer("Выберите категорию:", reply_markup=keyboard)
-    # ✅ Ошибка ввода
+        await message.answer("Выберите категорию оборудования:", reply_markup=keyboard)
+    # ✅ Ошибка
     else:
         await message.answer("Выберите оборудование из списка или нажмите 'Готово'.")
         

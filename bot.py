@@ -141,8 +141,8 @@ def get_remove_keyboard(cart: dict) -> ReplyKeyboardMarkup:
     keyboard_buttons = [[KeyboardButton(text=f"{item} ({qty} шт.)")] for item, qty in cart.items()]
     keyboard_buttons.append([
         KeyboardButton(text="Добавить еще"),
-        KeyboardButton(text="Готово"),
-        KeyboardButton(text="Отмена")
+        KeyboardButton(text="Отмена"),
+        KeyboardButton(text="Готово")
     ])
     return ReplyKeyboardMarkup(keyboard=keyboard_buttons, resize_keyboard=True)
 # --- ФУНКЦИИ ДЛЯ ЖИВОГО ИНТЕРФЕЙСА ---

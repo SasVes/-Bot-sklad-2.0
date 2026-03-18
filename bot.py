@@ -26,6 +26,18 @@ dp = Dispatcher(storage=MemoryStorage())
 scheduler = AsyncIOScheduler()
 DB_PATH = "bookings.db"
 EQUIPMENT_CACHE = {}
+EXCLUSION_GROUPS = [
+    {"Интеркомы 6шт", "Интеркомы 4шт", "Интеркомы 2шт"}
+]
+def is_item_blocked_by_exclusion(item_name: str, booked_db: dict, cart: dict) -> bool:
+    """Интеллектуальная проверка: не занята ли эта позиция через другую комплектацию."""
+    for group in EXCLUSION_GROUPS:
+        if item_name in group:
+            for other_item in group:
+                if other_item != item_name: # Проверяем соседей по группе
+                    if booked_db.get(other_item, 0) > 0 or cart.get(other_item, 0) > 0:
+                        return True # Сосед занят, значит эту позицию брать нельзя
+    return False
 LAST_JSON_CONTENT = ""
 GITHUB_JSON_URL = os.getenv("GITHUB_JSON_URL")
 async def load_equipment():
@@ -185,8 +197,13 @@ async def get_items_keyboard(category: str, start_date_str: str, end_date_str: s
         already_booked = booked_items.get(item, 0)
         in_cart = current_cart.get(item, 0)
         
+        # Стандартный математический остаток
         available_now = total_available - already_booked - in_cart
         
+        # ИНТЕЛЛЕКТУАЛЬНАЯ ПРОВЕРКА: блокируем, если занята другая комплектация
+        if is_item_blocked_by_exclusion(item, booked_items, current_cart):
+            available_now = 0
+            
         if available_now > 0:
             keyboard_buttons.append([KeyboardButton(text=f"{item} ({available_now} шт.)")])
         else:
@@ -356,6 +373,13 @@ async def choose_items(message: Message, state: FSMContext):
         return
     if item_name in EQUIPMENT_CACHE[category]:
         booked_db = await get_max_booked_in_range(start_str, end_str)
+        
+        # ИНТЕЛЛЕКТУАЛЬНАЯ ПРОВЕРКА ПЕРЕД ДОБАВЛЕНИЕМ
+        if is_item_blocked_by_exclusion(item_name, booked_db, cart):
+            keyboard = await get_items_keyboard(category, start_str, end_str, cart)
+            text = get_live_text(cart, days, "❗️ Внимание: этот комплект нельзя взять, так как уже забронирована другая его часть.")
+            await refresh_menu(message, state, text, keyboard)
+            return
         total_avail = EQUIPMENT_CACHE[category][item_name][0]
         currently_avail = total_avail - booked_db.get(item_name, 0) - cart.get(item_name, 0)
         

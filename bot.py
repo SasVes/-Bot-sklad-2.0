@@ -97,6 +97,19 @@ main_menu_keyboard = ReplyKeyboardMarkup(
     ],
     resize_keyboard=True
 )
+def get_categories_keyboard(cart: dict) -> ReplyKeyboardMarkup:
+    """Генерирует клавиатуру категорий с умными кнопками Готово/Удалить."""
+    keyboard_buttons = [[KeyboardButton(text=cat)] for cat in EQUIPMENT_CACHE.keys()]
+    
+    bottom_row = [KeyboardButton(text="Отмена")]
+    # Если в корзине что-то есть, показываем кнопку удаления
+    if cart:
+        bottom_row.append(KeyboardButton(text="Удалить позицию"))
+        
+    bottom_row.append(KeyboardButton(text="Готово"))
+    keyboard_buttons.append(bottom_row)
+    
+    return ReplyKeyboardMarkup(keyboard=keyboard_buttons, resize_keyboard=True)
 async def get_items_keyboard(category: str, start_date_str: str, end_date_str: str, current_cart: dict) -> ReplyKeyboardMarkup:
     """Клавиатура с остатками внутри категории."""
     booked_items = await get_max_booked_in_range(start_date_str, end_date_str)
@@ -128,8 +141,8 @@ def get_remove_keyboard(cart: dict) -> ReplyKeyboardMarkup:
     keyboard_buttons = [[KeyboardButton(text=f"{item} ({qty} шт.)")] for item, qty in cart.items()]
     keyboard_buttons.append([
         KeyboardButton(text="Добавить еще"),
-        KeyboardButton(text="Отмена"),
-        KeyboardButton(text="Готово")
+        KeyboardButton(text="Готово"),
+        KeyboardButton(text="Отмена")
     ])
     return ReplyKeyboardMarkup(keyboard=keyboard_buttons, resize_keyboard=True)
 # --- ФУНКЦИИ ДЛЯ ЖИВОГО ИНТЕРФЕЙСА ---
@@ -246,7 +259,7 @@ async def start(message: Message, state: FSMContext):
     await message.answer("Привет! Я бот для бронирования оборудования.", reply_markup=main_menu_keyboard)
 @dp.message(F.text == "Забронировать оборудование")
 async def start_booking(message: Message, state: FSMContext):
-    await load_equipment() # Мгновенная проверка GH при старте бронирования
+    await load_equipment() 
     await state.set_state(BookingState.choosing_start_date)
     await message.answer("Выберите дату НАЧАЛА бронирования:", reply_markup=await SimpleCalendar().start_calendar(
         year=datetime.datetime.now().year, month=datetime.datetime.now().month
@@ -296,11 +309,7 @@ async def process_calendar(callback_query: CallbackQuery, callback_data: dict, s
             await state.update_data(end_date=end_date_str, days_count=days_count)
             
             await state.set_state(BookingState.choosing_category)
-            keyboard = ReplyKeyboardMarkup(
-                keyboard=[[KeyboardButton(text=cat)] for cat in EQUIPMENT_CACHE.keys()] +
-                         [[KeyboardButton(text="Отмена")]],
-                resize_keyboard=True
-            )
+            keyboard = get_categories_keyboard(data.get("items", {}))
             text = get_live_text(data.get("items", {}), days_count, "📂 Выберите категорию оборудования:")
             
             await bot.delete_message(chat_id=callback_query.message.chat.id, message_id=callback_query.message.message_id)
@@ -320,6 +329,22 @@ async def choose_category(message: Message, state: FSMContext):
         except: pass
         await message.answer("Бронирование отменено.", reply_markup=main_menu_keyboard)
         
+    elif message.text == "Готово":
+        if not cart:
+            text = get_live_text(cart, days, "❗️ Смета пуста. Выберите категорию:")
+            await refresh_menu(message, state, text, get_categories_keyboard(cart))
+        else:
+            await show_confirmation(message, state)
+            
+    elif message.text == "Удалить позицию":
+        if not cart:
+            try: await message.delete()
+            except: pass
+            return
+        await state.set_state(BookingState.removing_items)
+        text = get_live_text(cart, days, "➖ Нажмите на позицию для удаления.")
+        await refresh_menu(message, state, text, get_remove_keyboard(cart))
+        
     elif message.text in EQUIPMENT_CACHE:
         await state.update_data(category=message.text)
         keyboard = await get_items_keyboard(message.text, data["start_date"], data["end_date"], cart)
@@ -327,9 +352,6 @@ async def choose_category(message: Message, state: FSMContext):
         
         await state.set_state(BookingState.choosing_items)
         await refresh_menu(message, state, text, keyboard)
-        
-    elif message.text == "Готово":
-        await show_confirmation(message, state)
         
     else:
         try: await message.delete()
@@ -352,11 +374,7 @@ async def choose_items(message: Message, state: FSMContext):
         
     elif message.text == "Назад":
         await state.set_state(BookingState.choosing_category)
-        keyboard = ReplyKeyboardMarkup(
-            keyboard=[[KeyboardButton(text=cat)] for cat in EQUIPMENT_CACHE.keys()] +
-                     [[KeyboardButton(text="Отмена")]],
-            resize_keyboard=True
-        )
+        keyboard = get_categories_keyboard(cart)
         text = get_live_text(cart, days, "📂 Выберите категорию оборудования:")
         await refresh_menu(message, state, text, keyboard)
         return
@@ -433,11 +451,7 @@ async def handle_confirmation(message: Message, state: FSMContext):
         
     elif message.text == "Добавить еще":
         await state.set_state(BookingState.choosing_category)
-        keyboard = ReplyKeyboardMarkup(
-            keyboard=[[KeyboardButton(text=cat)] for cat in EQUIPMENT_CACHE.keys()] +
-                     [[KeyboardButton(text="Отмена")]],
-            resize_keyboard=True
-        )
+        keyboard = get_categories_keyboard(cart)
         text = get_live_text(cart, days, "📂 Выберите категорию оборудования:")
         await refresh_menu(message, state, text, keyboard)
         
@@ -471,25 +485,15 @@ async def remove_items(message: Message, state: FSMContext):
         if not cart:
             text = get_live_text(cart, days, "❗️ Смета пуста. Выберите категорию:")
             await state.set_state(BookingState.choosing_category)
-            keyboard = ReplyKeyboardMarkup(
-                keyboard=[[KeyboardButton(text=cat)] for cat in EQUIPMENT_CACHE.keys()] +
-                         [[KeyboardButton(text="Отмена")]],
-                resize_keyboard=True
-            )
-            await refresh_menu(message, state, text, keyboard)
+            await refresh_menu(message, state, text, get_categories_keyboard(cart))
         else:
             await show_confirmation(message, state)
         return
         
     elif message.text == "Добавить еще":
         await state.set_state(BookingState.choosing_category)
-        keyboard = ReplyKeyboardMarkup(
-            keyboard=[[KeyboardButton(text=cat)] for cat in EQUIPMENT_CACHE.keys()] +
-                     [[KeyboardButton(text="Отмена")]],
-            resize_keyboard=True
-        )
         text = get_live_text(cart, days, "📂 Выберите категорию оборудования:")
-        await refresh_menu(message, state, text, keyboard)
+        await refresh_menu(message, state, text, get_categories_keyboard(cart))
         return
         
     elif message.text == "Отмена":
@@ -513,13 +517,8 @@ async def remove_items(message: Message, state: FSMContext):
         
         if not cart:
             await state.set_state(BookingState.choosing_category)
-            keyboard = ReplyKeyboardMarkup(
-                keyboard=[[KeyboardButton(text=cat)] for cat in EQUIPMENT_CACHE.keys()] +
-                         [[KeyboardButton(text="Отмена")]],
-                resize_keyboard=True
-            )
             text = get_live_text(cart, days, "Корзина пуста. 📂 Выберите категорию оборудования:")
-            await refresh_menu(message, state, text, keyboard)
+            await refresh_menu(message, state, text, get_categories_keyboard(cart))
             return
             
         text = get_live_text(cart, days, "➖ Нажмите на позицию для удаления.")

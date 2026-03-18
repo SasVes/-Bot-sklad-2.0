@@ -270,12 +270,12 @@ if message.text.split(" (")[0] in equipment[category]:
         await message.answer(f"{item_name} больше нет в наличии")
         return
     else:
-    elif message.text == "Готово":
-        if not items:
+        elif message.text == "Готово":
+    if not items:
             await message.answer("Вы не выбрали ни одного оборудования.")
         else:
             await show_confirmation(message, state)
-    elif message.text == "Назад":
+        elif message.text == "Назад":
         equipment = load_equipment()
         await state.set_state(BookingState.choosing_category)
         keyboard = ReplyKeyboardMarkup(
@@ -284,7 +284,7 @@ if message.text.split(" (")[0] in equipment[category]:
             resize_keyboard=True
         )
         await message.answer("Выберите категорию оборудования:", reply_markup=keyboard)
-    else:
+        else:
         await message.answer("Выберите оборудование из списка или нажмите 'Готово'.")
 
 # Обработка подтверждения бронирования

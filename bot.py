@@ -299,7 +299,7 @@ async def handle_confirmation(message: Message, state: FSMContext):
         await confirm_booking(message, state)
     elif message.text == "Добавить еще оборудование":
         await state.set_state(BookingState.choosing_category)
-       def build_cart_text_and_keyboard(items, current_category):
+    def build_cart_text_and_keyboard(items, current_category):
     equipment = load_equipment()
     text = "📋 Ваша смета:\n\n"
     total_price = 0

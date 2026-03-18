@@ -182,7 +182,9 @@ async def choose_category(message: Message, state: FSMContext):
         keyboard_buttons.append([KeyboardButton(text="Изменить дату")])
         
         keyboard = ReplyKeyboardMarkup(keyboard=keyboard_buttons, resize_keyboard=True)
-        msg = await message.answer(...)
+        text = "📋 Ваша смета:\n\nПока ничего не выбрано\n\n💰 Итого: 0 руб."
+        msg = await message.answer(text, reply_markup=keyboard)
+        await state.update_data(main_msg_id=msg.message_id)
         await state.update_data(main_msg_id=msg.message_id)
         await state.set_state(BookingState.choosing_items)
     elif message.text == "Изменить дату":

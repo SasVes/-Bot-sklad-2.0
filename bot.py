@@ -56,7 +56,6 @@ def get_live_text(cart: dict, days: int, prompt: str, is_final: bool = False) ->
     receipt_text, base_total = generate_receipt(cart)
     final_total = base_total * days
     
-    # Меняем заголовок в зависимости от того, финальная ли это стадия
     title = "Смета" if is_final else "Предварительная смета"
     
     return (f"🛒 *{title}:*\n{receipt_text}\n\n"

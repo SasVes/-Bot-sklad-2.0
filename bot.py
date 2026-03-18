@@ -152,8 +152,7 @@ async def process_simple_calendar(callback_query: CallbackQuery, callback_data: 
             resize_keyboard=True
         )
         await callback_query.message.answer("Выберите категорию оборудования:", reply_markup=keyboard)
-
-equipment FROM bookings WHERE date = ?", (date,))
+        cursor.execute("SELECT equipment FROM bookings WHERE date = ?", (date,))
         booked_equipment = cursor.fetchall()
         booked_items = {}# Обработка выбора категории
 @dp.message(BookingState.choosing_category)

@@ -26,10 +26,35 @@ dp = Dispatcher(storage=MemoryStorage())
 scheduler = AsyncIOScheduler()
 DB_PATH = "bookings.db"
 EQUIPMENT_CACHE = {}
-def load_equipment():
-    global EQUIPMENT_CACHE
-    with open("equipment.json", "r", encoding="utf-8") as f:
-        EQUIPMENT_CACHE = json.load(f)
+LAST_JSON_CONTENT = ""
+GITHUB_JSON_URL = os.getenv("GITHUB_JSON_URL")
+async def load_equipment():
+    global EQUIPMENT_CACHE, LAST_JSON_CONTENT
+    
+    # Если ссылка на Github добавлена
+    if GITHUB_JSON_URL:
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(GITHUB_JSON_URL) as response:
+                    if response.status == 200:
+                        text_data = await response.text()
+                        # Если текст файла изменился с прошлой проверки
+                        if text_data != LAST_JSON_CONTENT:
+                            new_data = json.loads(text_data)
+                            EQUIPMENT_CACHE.clear()
+                            EQUIPMENT_CACHE.update(new_data)
+                            LAST_JSON_CONTENT = text_data
+                            logging.info("Оборудование успешно обновлено с GitHub!")
+        except Exception as e:
+            logging.error(f"Ошибка загрузки с GitHub: {e}")
+    else:
+        # Резервный вариант, если ссылки нет (читает локальный файл)
+        try:
+            with open("equipment.json", "r", encoding="utf-8") as f:
+                EQUIPMENT_CACHE.clear()
+                EQUIPMENT_CACHE.update(json.load(f))
+        except Exception as e:
+            logging.error(f"Ошибка локальной загрузки: {e}")
 class BookingState(StatesGroup):
     choosing_start_date = State()
     choosing_end_date = State()
@@ -577,8 +602,11 @@ async def process_delete(callback: CallbackQuery, state: FSMContext):
     )
 async def on_startup():
     logging.info("Инициализация БД и загрузка конфигурации...")
-    load_equipment()
+    await load_equipment()  # <-- добавили await
     await init_db()
+    
+    # Проверка GitHub каждую минуту
+    scheduler.add_job(load_equipment, 'interval', seconds=60)
     scheduler.add_job(archive_past_bookings, 'cron', hour=0, minute=0)
     scheduler.start()
 async def on_shutdown():

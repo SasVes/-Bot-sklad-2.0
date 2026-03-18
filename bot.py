@@ -31,30 +31,38 @@ GITHUB_JSON_URL = os.getenv("GITHUB_JSON_URL")
 async def load_equipment():
     global EQUIPMENT_CACHE, LAST_JSON_CONTENT
     
-    # Если ссылка на Github добавлена
-    if GITHUB_JSON_URL:
+    # Заставляем бота каждый раз проверять .env
+    github_url = os.getenv("GITHUB_JSON_URL")
+    
+    if github_url:
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(GITHUB_JSON_URL) as response:
+                async with session.get(github_url) as response:
+                    # Если GitHub отдал файл
                     if response.status == 200:
                         text_data = await response.text()
-                        # Если текст файла изменился с прошлой проверки
                         if text_data != LAST_JSON_CONTENT:
-                            new_data = json.loads(text_data)
-                            EQUIPMENT_CACHE.clear()
-                            EQUIPMENT_CACHE.update(new_data)
-                            LAST_JSON_CONTENT = text_data
-                            logging.info("Оборудование успешно обновлено с GitHub!")
+                            try:
+                                new_data = json.loads(text_data)
+                                EQUIPMENT_CACHE.clear()
+                                EQUIPMENT_CACHE.update(new_data)
+                                LAST_JSON_CONTENT = text_data
+                                logging.info("✅ Оборудование успешно загружено/обновлено с GitHub!")
+                            except json.JSONDecodeError as e:
+                                logging.error(f"❌ ОШИБКА JSON: Проверьте запятые и кавычки. Ошибка тут: {e}")
+                    else:
+                        logging.error(f"❌ Ссылка не работает (код {response.status}). Репозиторий приватный или ссылка обрезана.")
         except Exception as e:
-            logging.error(f"Ошибка загрузки с GitHub: {e}")
+            logging.error(f"❌ Ошибка интернета/сети: {e}")
     else:
-        # Резервный вариант, если ссылки нет (читает локальный файл)
+        # Если ссылки нет, читаем с диска
         try:
             with open("equipment.json", "r", encoding="utf-8") as f:
                 EQUIPMENT_CACHE.clear()
                 EQUIPMENT_CACHE.update(json.load(f))
+                logging.info("📂 Ссылка на GitHub не найдена, загружен локальный файл equipment.json")
         except Exception as e:
-            logging.error(f"Ошибка локальной загрузки: {e}")
+            logging.error(f"❌ Не могу прочитать локальный файл: {e}")
 class BookingState(StatesGroup):
     choosing_start_date = State()
     choosing_end_date = State()

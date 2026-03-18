@@ -125,8 +125,7 @@ async def start_booking(message: Message, state: FSMContext):
     await state.set_state(BookingState.choosing_date)
     await message.answer("Выберите дату бронирования:", reply_markup=await SimpleCalendar().start_calendar(
     year=datetime.datetime.now().year,
-    month=datetime.datetime.now().month,
-    min_date=datetime.datetime.now()
+    month=datetime.datetime.now().month
 ))
 
 # Обработка выбора даты из календаря

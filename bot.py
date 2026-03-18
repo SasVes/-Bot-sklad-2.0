@@ -230,7 +230,12 @@ async def show_confirmation(message: Message, state: FSMContext):
 # Обработка выбора оборудования
 @dp.message(BookingState.choosing_items)
 async def choose_items(message: Message, state: FSMContext):
+    try:
+    await message.delete()
+except:
+    pass
     data = await state.get_data()
+    msg_id = data.get("main_msg_id")
     category = data["category"]
     items = data.get("items", {})
     equipment = load_equipment()
@@ -260,7 +265,7 @@ async def choose_items(message: Message, state: FSMContext):
             items[item_name] = current_selected + 1
             await state.update_data(items=items)
         else:
-            await message.answer(f"{item_name} больше нет в наличии")
+            await message.answer(f"{item_name} больше нет")
             return
         # ✅ Обновляем клавиатуру
         keyboard_buttons = []
@@ -275,12 +280,32 @@ async def choose_items(message: Message, state: FSMContext):
         keyboard_buttons.append([KeyboardButton(text="Назад"), KeyboardButton(text="Готово")])
         keyboard_buttons.append([KeyboardButton(text="Изменить дату")])
         keyboard = ReplyKeyboardMarkup(keyboard=keyboard_buttons, resize_keyboard=True)
-        await message.answer("Выберите оборудование:", reply_markup=keyboard)
+        msg = text = "📋 Ваша смета:\n\n"
+        total_price = 0
+        for item, qty in items.items():
+            price = equipment[category][item][1] * qty
+            total_price += price
+            text += f"{item} x{qty} — {price} руб.\n"
+            if not items:
+                text += "Пока ничего не выбрано\n"
+                text += f"\n💰 Итого: {total_price} руб."
+                # Обновляем сообщение
+    try:
+        await message.bot.edit_message_text(
+        chat_id=message.chat.id,
+        message_id=msg_id,
+        text=text,
+        reply_markup=keyboard
+    )
+except:
+    msg = await message.answer(text, reply_markup=keyboard)
+    await state.update_data(main_msg_id=msg.message_id)
+        await state.update_data(main_msg_id=msg.message_id)
         return
     # ✅ Готово
     elif message.text == "Готово":
         if not items:
-            await message.answer("Вы не выбрали ни одного оборудования.")
+            await message.answer("Вы не выбрали ничего.")
         else:
             await show_confirmation(message, state)
     # ✅ Назад
@@ -291,7 +316,7 @@ async def choose_items(message: Message, state: FSMContext):
                      [[KeyboardButton(text="Изменить дату"), KeyboardButton(text="Отмена"), KeyboardButton(text="Готово")]],
             resize_keyboard=True
         )
-        await message.answer("Выберите категорию оборудования:", reply_markup=keyboard)
+        await message.answer("Выберите категорию:", reply_markup=keyboard)
     # ✅ Ошибка ввода
     else:
         await message.answer("Выберите оборудование из списка или нажмите 'Готово'.")

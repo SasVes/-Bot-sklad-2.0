@@ -348,8 +348,8 @@ async def show_confirmation(message: Message, state: FSMContext):
         period_str = f"{data['start_date']} ({days} дн.)"
     else:
         period_str = f"с {data['start_date']} по {data['end_date']} ({days} дн.)"
-        
-        text = get_live_text(cart, days, f"📅 Выбранный период: {period_str}\n\nВнимательно проверьте смету и подтвердите бронь.", is_final=True)
+    
+    text = get_live_text(cart, days, f"📅 Выбранный период: {period_str}\n\nВнимательно проверьте смету и подтвердите бронь.", is_final=True)
     
     await state.set_state(BookingState.confirmation)
     await refresh_menu(message, state, text, keyboard)

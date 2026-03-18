@@ -162,6 +162,9 @@ async def choose_category(message: Message, state: FSMContext):
         await state.update_data(category=message.text)
         data = await state.get_data()
         date = data.get("date")
+        msg_id = data.get("main_msg_id")
+        items = data.get("items", {})
+        # Получаем брони
         cursor.execute("SELECT equipment FROM bookings WHERE date = ?", (date,))
         booked_equipment = cursor.fetchall()
         booked_items = {}
@@ -170,22 +173,47 @@ async def choose_category(message: Message, state: FSMContext):
                 if " x" in item_line:
                     name, quantity = item_line.split(" x")
                     booked_items[name] = booked_items.get(name, 0) + int(quantity)
-        
+        # Клавиатура
         keyboard_buttons = []
         for item, details in equipment[message.text].items():
             total_available = details[0]
             booked = booked_items.get(item, 0)
-            available = total_available - booked
-            keyboard_buttons.append([KeyboardButton(text=f"{item} ({available} шт.)")])
-        
+            selected = items.get(message.text, {}).get(item, 0)
+            available = total_available - booked - selected
+            keyboard_buttons.append([
+                KeyboardButton(text=f"{item} ({max(0, available)} шт.)")
+            ])
         keyboard_buttons.append([KeyboardButton(text="Назад"), KeyboardButton(text="Готово")])
         keyboard_buttons.append([KeyboardButton(text="Изменить дату")])
-        
         keyboard = ReplyKeyboardMarkup(keyboard=keyboard_buttons, resize_keyboard=True)
-        text = "📋 Ваша смета:\n\nПока ничего не выбрано\n\n💰 Итого: 0 руб."
-        msg = await message.answer(text, reply_markup=keyboard)
-        await state.update_data(main_msg_id=msg.message_id)
-        await state.update_data(main_msg_id=msg.message_id)
+        # Смета
+        text = "📋 Ваша смета:\n\n"
+        total_price = 0
+        for cat, cat_items in items.items():
+            text += f"📦 {cat}:\n"
+            for item, qty in cat_items.items():
+                price = equipment[cat][item][1] * qty
+                total_price += price
+                text += f"{item} x{qty} — {price} руб.\n"
+            text += "\n"
+        if not items:
+            text += "Пока ничего не выбрано\n"
+        text += f"💰 Итого: {total_price} руб."
+        # РЕДАКТИРУЕМ сообщение
+        try:
+            if msg_id:
+                await message.bot.edit_message_text(
+                    chat_id=message.chat.id,
+                    message_id=msg_id,
+                    text=text,
+                    reply_markup=keyboard
+                )
+            else:
+                msg = await message.answer(text, reply_markup=keyboard)
+                await state.update_data(main_msg_id=msg.message_id)
+        except:
+            msg = await message.answer(text, reply_markup=keyboard)
+            await state.update_data(main_msg_id=msg.message_id)
         await state.set_state(BookingState.choosing_items)
     elif message.text == "Изменить дату":
         await state.set_state(BookingState.choosing_date)
@@ -232,7 +260,6 @@ async def show_confirmation(message: Message, state: FSMContext):
 # Обработка выбора оборудования
 @dp.message(BookingState.choosing_items)
 async def choose_items(message: Message, state: FSMContext):
-    # Удаляем сообщение пользователя
     try:
         await message.delete()
     except:
@@ -242,11 +269,11 @@ async def choose_items(message: Message, state: FSMContext):
     category = data["category"]
     items = data.get("items", {})
     equipment = load_equipment()
-    # ✅ Если выбрали оборудование
+    category_items = items.get(category, {})
     if message.text.split(" (")[0] in equipment[category]:
         item_name = message.text.split(" (")[0]
         date = data["date"]
-        # Получаем брони
+        # Брони
         cursor.execute("SELECT equipment FROM bookings WHERE date = ?", (date,))
         booked_equipment = cursor.fetchall()
         booked_items = {}
@@ -261,21 +288,21 @@ async def choose_items(message: Message, state: FSMContext):
                         except:
                             continue
                         booked_items[name] = booked_items.get(name, 0) + quantity
-        current_selected = items.get(item_name, 0)
+        current_selected = category_items.get(item_name, 0)
         total_available = equipment[category][item_name][0]
         already_booked = booked_items.get(item_name, 0)
         if current_selected + already_booked < total_available:
-            items[item_name] = current_selected + 1
+            category_items[item_name] = current_selected + 1
+            items[category] = category_items
             await state.update_data(items=items)
         else:
-            await message.answer(f"{item_name} больше нет в наличии")
             return
-        # ✅ Клавиатура
+        # Клавиатура
         keyboard_buttons = []
         for item, details in equipment[category].items():
             total = details[0]
             booked = booked_items.get(item, 0)
-            selected = items.get(item, 0)
+            selected = category_items.get(item, 0)
             available = total - booked - selected
             keyboard_buttons.append([
                 KeyboardButton(text=f"{item} ({max(0, available)} шт.)")
@@ -283,17 +310,19 @@ async def choose_items(message: Message, state: FSMContext):
         keyboard_buttons.append([KeyboardButton(text="Назад"), KeyboardButton(text="Готово")])
         keyboard_buttons.append([KeyboardButton(text="Изменить дату")])
         keyboard = ReplyKeyboardMarkup(keyboard=keyboard_buttons, resize_keyboard=True)
-        # ✅ Смета
+        # Смета
         text = "📋 Ваша смета:\n\n"
         total_price = 0
-        for item, qty in items.items():
-            price = equipment[category][item][1] * qty
-            total_price += price
-            text += f"{item} x{qty} — {price} руб.\n"
+        for cat, cat_items in items.items():
+            text += f"📦 {cat}:\n"
+            for item, qty in cat_items.items():
+                price = equipment[cat][item][1] * qty
+                total_price += price
+                text += f"{item} x{qty} — {price} руб.\n"
+            text += "\n"
         if not items:
             text += "Пока ничего не выбрано\n"
-        text += f"\n💰 Итого: {total_price} руб."
-        # ✅ Обновляем сообщение
+        text += f"💰 Итого: {total_price} руб."
         try:
             await message.bot.edit_message_text(
                 chat_id=message.chat.id,
@@ -304,6 +333,22 @@ async def choose_items(message: Message, state: FSMContext):
         except:
             msg = await message.answer(text, reply_markup=keyboard)
             await state.update_data(main_msg_id=msg.message_id)
+        return
+    elif message.text == "Готово":
+        if not items:
+            await message.answer("Вы не выбрали ни одного оборудования.")
+        else:
+            await show_confirmation(message, state)
+    elif message.text == "Назад":
+        await state.set_state(BookingState.choosing_category)
+        equipment = load_equipment()
+        keyboard = ReplyKeyboardMarkup(
+            keyboard=[[KeyboardButton(text=cat)] for cat in equipment.keys()] +
+                     [[KeyboardButton(text="Изменить дату"), KeyboardButton(text="Отмена"), KeyboardButton(text="Готово")]],
+            resize_keyboard=True
+        )
+        await message.answer("Выберите категорию оборудования:", reply_markup=keyboard)
+    else:
         return
     # ✅ Готово
     elif message.text == "Готово":

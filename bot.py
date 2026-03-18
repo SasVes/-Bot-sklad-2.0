@@ -239,7 +239,12 @@ async def process_calendar(callback_query: CallbackQuery, callback_data: dict, s
             
             await state.update_data(start_date=start_date_str, items={}, editing_booking_id=editing_id)
             await state.set_state(BookingState.choosing_end_date)
-            await bot.edit_message_text(f"Начало аренды: {start_date_str}\n\nТеперь выберите дату ОКОНЧАНИЯ бронирования:", callback_query.message.chat.id, callback_query.message.message_id, reply_markup=await SimpleCalendar().start_calendar(year=selected_date.year, month=selected_date.month))
+            await bot.edit_message_text(
+                text=f"Начало аренды: {start_date_str}\n\nТеперь выберите дату ОКОНЧАНИЯ бронирования:", 
+                chat_id=callback_query.message.chat.id, 
+                message_id=callback_query.message.message_id, 
+                reply_markup=await SimpleCalendar().start_calendar(year=selected_date.year, month=selected_date.month)
+            )
             
         elif current_state == BookingState.choosing_end_date.state:
             data = await state.get_data()

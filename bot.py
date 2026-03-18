@@ -31,14 +31,17 @@ GITHUB_JSON_URL = os.getenv("GITHUB_JSON_URL")
 async def load_equipment():
     global EQUIPMENT_CACHE, LAST_JSON_CONTENT
     
-    # Заставляем бота каждый раз проверять .env
     github_url = os.getenv("GITHUB_JSON_URL")
     
     if github_url:
+        # Обман кэша GitHub: добавляем к ссылке текущее время в секундах
+        timestamp = int(datetime.datetime.now().timestamp())
+        no_cache_url = f"{github_url}?t={timestamp}"
+        
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(github_url) as response:
-                    # Если GitHub отдал файл
+                # Отправляем запрос по уникальной ссылке
+                async with session.get(no_cache_url) as response:
                     if response.status == 200:
                         text_data = await response.text()
                         if text_data != LAST_JSON_CONTENT:
@@ -47,11 +50,11 @@ async def load_equipment():
                                 EQUIPMENT_CACHE.clear()
                                 EQUIPMENT_CACHE.update(new_data)
                                 LAST_JSON_CONTENT = text_data
-                                logging.info("✅ Оборудование успешно загружено/обновлено с GitHub!")
+                                logging.info("✅ Оборудование мгновенно обновлено с GitHub!")
                             except json.JSONDecodeError as e:
-                                logging.error(f"❌ ОШИБКА JSON: Проверьте запятые и кавычки. Ошибка тут: {e}")
+                                logging.error(f"❌ ОШИБКА JSON: Проверьте запятые и кавычки. Ошибка: {e}")
                     else:
-                        logging.error(f"❌ Ссылка не работает (код {response.status}). Репозиторий приватный или ссылка обрезана.")
+                        logging.error(f"❌ Ссылка не работает (код {response.status}).")
         except Exception as e:
             logging.error(f"❌ Ошибка интернета/сети: {e}")
     else:
@@ -60,7 +63,7 @@ async def load_equipment():
             with open("equipment.json", "r", encoding="utf-8") as f:
                 EQUIPMENT_CACHE.clear()
                 EQUIPMENT_CACHE.update(json.load(f))
-                logging.info("📂 Ссылка на GitHub не найдена, загружен локальный файл equipment.json")
+                logging.info("📂 Ссылка на GitHub не найдена, загружен локальный файл.")
         except Exception as e:
             logging.error(f"❌ Не могу прочитать локальный файл: {e}")
 class BookingState(StatesGroup):

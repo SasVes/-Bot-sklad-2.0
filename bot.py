@@ -143,10 +143,32 @@ async def process_calendar(callback_query: CallbackQuery, callback_data: dict, s
     selected, date = await SimpleCalendar().process_selection(callback_query, callback_data)
     if selected:
         selected_date = date.date()
+        
+        # Проверка на прошедшую дату
         if selected_date < datetime.date.today():
-            await callback_query.message.answer("Нельзя выбрать прошедшую дату. Попробуйте снова.")
-            return
+            data = await state.get_data()
+            old_date = data.get("date")
             
+            if old_date:
+                # Если дата уже была выбрана ранее, оставляем её и возвращаем меню категорий
+                await callback_query.message.answer(f"Нельзя выбрать прошедшую дату. Оставляем ранее выбранную: {old_date}")
+                await state.set_state(BookingState.choosing_category)
+                keyboard = ReplyKeyboardMarkup(
+                    keyboard=[[KeyboardButton(text=cat)] for cat in EQUIPMENT_CACHE.keys()] +
+                             [[KeyboardButton(text="Изменить дату"), KeyboardButton(text="Отмена")]],
+                    resize_keyboard=True
+                )
+                await callback_query.message.answer("Выберите категорию:", reply_markup=keyboard)
+            else:
+                # Если это начало бронирования, показываем календарь заново
+                await callback_query.message.answer(
+                    "❌ Нельзя выбрать прошедшую дату. Пожалуйста, выберите актуальную:",
+                    reply_markup=await SimpleCalendar().start_calendar(
+                        year=datetime.datetime.now().year, month=datetime.datetime.now().month
+                    )
+                )
+            return
+        # Если дата корректная
         date_str = selected_date.strftime("%Y-%m-%d")
         await state.update_data(date=date_str, items={}) # Очищаем корзину при смене даты
         await callback_query.message.answer(f"Вы выбрали дату: {date_str}")
